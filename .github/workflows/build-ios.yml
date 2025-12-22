@@ -1,0 +1,77 @@
+name: Build iOS App
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'App folder name (e.g., frost-world-1766192023455)'
+        required: true
+        type: string
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.0'
+          channel: 'stable'
+          cache: true
+      
+      - name: Verify app exists
+        run: |
+          if [ ! -d "apps/${{ inputs.app_name }}" ]; then
+            echo "Error: App ${{ inputs.app_name }} not found"
+            exit 1
+          fi
+          echo "Building app: ${{ inputs.app_name }}"
+          ls -la "apps/${{ inputs.app_name }}"
+      
+      - name: Install Flutter dependencies
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: flutter pub get
+      
+      - name: Run Flutter doctor
+        run: flutter doctor -v
+      
+      - name: Clean build
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: flutter clean
+      
+      - name: Build iOS app (release mode, no codesign)
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          flutter build ios --release --no-codesign
+      
+      - name: Create IPA archive
+        working-directory: ./apps/${{ inputs.app_name }}/build/ios/iphoneos
+        run: |
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r -q ../../../${{ inputs.app_name }}.ipa Payload
+          cd ../../..
+          ls -lh ${{ inputs.app_name }}.ipa
+      
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ inputs.app_name }}-${{ github.run_number }}
+          path: ./apps/${{ inputs.app_name }}/${{ inputs.app_name }}.ipa
+          retention-days: 30
+          compression-level: 0
+      
+      - name: Build summary
+        run: |
+          echo "### 🎉 iOS Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**App:** ${{ inputs.app_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact:** ios-${{ inputs.app_name }}-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the IPA from the Artifacts section above." >> $GITHUB_STEP_SUMMARY

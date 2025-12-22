@@ -1,0 +1,96 @@
+name: Build Android App
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'App folder name (e.g., frost-world-1766192023455)'
+        required: true
+        type: string
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.0'
+          channel: 'stable'
+          cache: true
+      
+      - name: Verify app exists
+        run: |
+          if [ ! -d "apps/${{ inputs.app_name }}" ]; then
+            echo "Error: App ${{ inputs.app_name }} not found"
+            exit 1
+          fi
+          echo "Building app: ${{ inputs.app_name }}"
+          ls -la "apps/${{ inputs.app_name }}"
+      
+      - name: Install Flutter dependencies
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: flutter pub get
+      
+      - name: Run Flutter doctor
+        run: flutter doctor -v
+      
+      - name: Clean build
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: flutter clean
+      
+      - name: Build Android APK (release mode)
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          flutter build apk --release
+      
+      - name: Build Android App Bundle (release mode)
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          flutter build appbundle --release
+      
+      - name: List build outputs
+        working-directory: ./apps/${{ inputs.app_name }}/build/app/outputs
+        run: |
+          echo "APK outputs:"
+          ls -lh apk/release/ || true
+          echo ""
+          echo "AAB outputs:"
+          ls -lh bundle/release/ || true
+      
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ inputs.app_name }}-${{ github.run_number }}
+          path: ./apps/${{ inputs.app_name }}/build/app/outputs/apk/release/app-release.apk
+          retention-days: 30
+      
+      - name: Upload App Bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aab-${{ inputs.app_name }}-${{ github.run_number }}
+          path: ./apps/${{ inputs.app_name }}/build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
+      
+      - name: Build summary
+        run: |
+          echo "### 🎉 Android Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**App:** ${{ inputs.app_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**APK Artifact:** android-apk-${{ inputs.app_name }}-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**AAB Artifact:** android-aab-${{ inputs.app_name }}-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the APK or AAB from the Artifacts section above." >> $GITHUB_STEP_SUMMARY

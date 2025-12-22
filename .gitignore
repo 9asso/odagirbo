@@ -1,0 +1,9 @@
+.DS_Store
+*.log
+
+# Keep apps directory structure but ignore build artifacts within apps
+apps/**/build/
+apps/**/.dart_tool/
+apps/**/.flutter-plugins
+apps/**/.flutter-plugins-dependencies
+apps/**/node_modules/
