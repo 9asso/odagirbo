@@ -1,5 +1,7 @@
 name: Build Android App
 
+run-name: Build Android - ${{ inputs.app_name }}
+
 on:
   workflow_dispatch:
     inputs:

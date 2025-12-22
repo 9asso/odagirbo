@@ -1,5 +1,7 @@
 name: Build iOS App
 
+run-name: Build iOS - ${{ inputs.app_name }}
+
 on:
   workflow_dispatch:
     inputs:
