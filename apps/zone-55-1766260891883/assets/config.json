@@ -70,7 +70,7 @@
       }
     },
     "genderSelection": {
-      "enabled": false,
+      "enabled": true,
       "images": {
         "background": "assets/pack/bg.png",
         "title": "assets/pack/boyorgirl.png",
@@ -84,7 +84,7 @@
       }
     },
     "userInfo": {
-      "enabled": false,
+      "enabled": true,
       "images": {
         "background": "assets/pack/bg.png",
         "close": "assets/pack/close.png",
