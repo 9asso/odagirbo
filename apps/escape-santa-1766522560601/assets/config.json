@@ -80,7 +80,7 @@
       }
     },
     "genderSelection": {
-      "enabled": false,
+      "enabled": true,
       "images": {
         "background": "assets/pack/bg.png",
         "title": "assets/pack/boyorgirl.png",
@@ -145,7 +145,7 @@
       "unselectedOpacity": 0.3
     },
     "moreGames": {
-      "enabled": true,
+      "enabled": false,
       "images": {
         "background": "assets/pack/bg.png",
         "header": "assets/pack/moregames.png",
