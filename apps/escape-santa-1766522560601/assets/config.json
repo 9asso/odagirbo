@@ -94,7 +94,7 @@
       }
     },
     "userInfo": {
-      "enabled": false,
+      "enabled": true,
       "images": {
         "background": "assets/pack/bg.png",
         "close": "assets/pack/close.png",
@@ -241,9 +241,9 @@
     }
   },
   "theme": {
-    "primaryColor": "#6366F1",
-    "accentColor": "#EC4899",
-    "errorColor": "#F44336"
+    "primaryColor": "#ffffff",
+    "accentColor": "#ffffff",
+    "errorColor": "#ffffff"
   },
   "animation": {
     "buttonPressDuration": 150,
