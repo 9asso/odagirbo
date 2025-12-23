@@ -26,7 +26,7 @@
   },
   "game": {
     "enabled": true,
-    "url": "",
+    "url": "https://playhop.com/dist-app/481662?header=no&skip-guard=1&utm_source=parent_window_api&utm_medium=playgama",
     "loader": {
       "enabled": true,
       "duration": 15
