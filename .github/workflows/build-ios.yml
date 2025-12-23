@@ -9,6 +9,10 @@ on:
         description: 'App folder name (e.g., frost-world-1766192023455)'
         required: true
         type: string
+      code_signing_id:
+        description: 'Code signing configuration ID (timestamp)'
+        required: false
+        type: string
 
 jobs:
   build-ios:
@@ -35,6 +39,44 @@ jobs:
           echo "Building app: ${{ inputs.app_name }}"
           ls -la "apps/${{ inputs.app_name }}"
       
+      - name: Setup code signing (if provided)
+        if: ${{ inputs.code_signing_id != '' }}
+        run: |
+          CODE_SIGNING_FILE="apps/${{ inputs.app_name }}/.code-signing/${{ inputs.code_signing_id }}.json"
+          
+          if [ ! -f "$CODE_SIGNING_FILE" ]; then
+            echo "Error: Code signing configuration not found: $CODE_SIGNING_FILE"
+            exit 1
+          fi
+          
+          echo "Loading code signing configuration from: $CODE_SIGNING_FILE"
+          
+          # Extract values from JSON using jq
+          PROVISIONING_PROFILE=$(cat "$CODE_SIGNING_FILE" | jq -r '.provisioningProfile')
+          CERTIFICATE=$(cat "$CODE_SIGNING_FILE" | jq -r '.certificate')
+          CERTIFICATE_PASSWORD=$(cat "$CODE_SIGNING_FILE" | jq -r '.certificatePassword')
+          
+          # Create directories
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          
+          # Decode and install certificate
+          echo "$CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          
+          # Decode and install provisioning profile
+          echo "$PROVISIONING_PROFILE" | base64 --decode > profile.mobileprovision
+          UUID=$(grep -aA1 UUID profile.mobileprovision | grep -o "[-A-F0-9]\{36\}")
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          
+          # Clean up sensitive files
+          rm certificate.p12 profile.mobileprovision
+          
+          echo "Code signing configured successfully"
+      
       - name: Install Flutter dependencies
         working-directory: ./apps/${{ inputs.app_name }}
         run: flutter pub get
@@ -46,10 +88,16 @@ jobs:
         working-directory: ./apps/${{ inputs.app_name }}
         run: flutter clean
       
-      - name: Build iOS app (release mode, no codesign)
+      - name: Build iOS app (with codesign if configured)
         working-directory: ./apps/${{ inputs.app_name }}
         run: |
-          flutter build ios --release --no-codesign
+          if [ -n "${{ inputs.certificate }}" ] && [ -n "${{ inputs.provisioning_profile }}" ]; then
+            echo "Building with code signing..."
+            flutter build ios --release
+          else
+            echo "Building without code signing..."
+            flutter build ios --release --no-codesign
+          fi
       
       - name: Create IPA archive
         working-directory: ./apps/${{ inputs.app_name }}/build/ios/iphoneos
@@ -68,6 +116,11 @@ jobs:
           retention-days: 30
           compression-level: 0
       
+      - name: Cleanup keychain
+        if: ${{ always() && inputs.certificate != '' }}
+        run: |
+          security delete-keychain build.keychain || true
+      
       - name: Build summary
         run: |
           echo "### 🎉 iOS Build Complete" >> $GITHUB_STEP_SUMMARY
@@ -75,5 +128,10 @@ jobs:
           echo "**App:** ${{ inputs.app_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Build Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "**Artifact:** ios-${{ inputs.app_name }}-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.certificate }}" ] && [ -n "${{ inputs.provisioning_profile }}" ]; then
+            echo "**Code Signing:** ✅ Enabled" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Code Signing:** ⚠️ Disabled" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Download the IPA from the Artifacts section above." >> $GITHUB_STEP_SUMMARY
