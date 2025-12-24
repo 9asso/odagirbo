@@ -68,7 +68,8 @@ jobs:
           security default-keychain -s "$KEYCHAIN_PATH"
           security unlock-keychain -p "" "$KEYCHAIN_PATH"
           security import certificate.p12 -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH" || echo "Warning: set-key-partition-list failed, continuing..."
+          # Allow codesign/xcodebuild to access the private key in CI.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" || echo "Warning: set-key-partition-list failed, continuing..."
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           
           # Decode and install provisioning profile
@@ -102,6 +103,11 @@ jobs:
             exit 1
           fi
           echo "Provisioning profile Name: $PROFILE_NAME"
+
+          echo "Provisioning profile diagnostics:"
+          echo "- get-task-allow: $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' profile.plist 2>/dev/null || echo 'n/a')"
+          echo "- ProvisionsAllDevices: $(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' profile.plist 2>/dev/null || echo 'n/a')"
+          echo "- Has ProvisionedDevices: $(/usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' profile.plist >/dev/null 2>&1 && echo 'true' || echo 'false')"
 
           # Decide signing identity + export method based on provisioning profile.
           GET_TASK_ALLOW=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' profile.plist 2>/dev/null || echo "false")
@@ -159,6 +165,7 @@ jobs:
           echo "IOS_EXPORT_METHOD=$IOS_EXPORT_METHOD" >> $GITHUB_ENV
           echo "IOS_SIGN_IDENTITY=$SIGN_IDENTITY" >> $GITHUB_ENV
           echo "IOS_TEAM_ID=$TEAM_ID" >> $GITHUB_ENV
+          echo "IOS_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
 
           echo "Available code signing identities:"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
@@ -185,6 +192,19 @@ jobs:
         run: |
           if [ -n "${{ inputs.code_signing_id }}" ]; then
             echo "Building with code signing..."
+            echo "Using export method: $IOS_EXPORT_METHOD"
+            echo "Using signing identity: $IOS_SIGN_IDENTITY"
+            echo "Using keychain: $IOS_KEYCHAIN_PATH"
+            security unlock-keychain -p "" "$IOS_KEYCHAIN_PATH" || true
+            security set-keychain-settings -lut 21600 "$IOS_KEYCHAIN_PATH" || true
+            security list-keychains -d user || true
+            echo "Identities visible to codesign (build keychain):"
+            security find-identity -v -p codesigning "$IOS_KEYCHAIN_PATH" || true
+            echo "Identities visible to codesign (all):"
+            security find-identity -v -p codesigning || true
+
+            # Force xcodebuild/codesign to use our keychain.
+            export OTHER_CODE_SIGN_FLAGS="--keychain $IOS_KEYCHAIN_PATH"
             flutter build ipa --release --export-method "$IOS_EXPORT_METHOD"
           else
             echo "Building without code signing..."
