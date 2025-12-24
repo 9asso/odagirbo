@@ -104,6 +104,17 @@ jobs:
           fi
           echo "Provisioning profile Name: $PROFILE_NAME"
 
+          PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' profile.plist 2>/dev/null || true)
+          if [ -z "$PROFILE_APP_ID" ]; then
+            echo "Error: Could not extract Entitlements:application-identifier from provisioning profile"
+            exit 1
+          fi
+          echo "Provisioning profile application-identifier: $PROFILE_APP_ID"
+
+          # Derive bundle id from the profile's application-identifier (TEAMID.<bundle> or TEAMID.*)
+          PROFILE_BUNDLE_ID="${PROFILE_APP_ID#${TEAM_ID}.}"
+          echo "Provisioning profile bundle id pattern: $PROFILE_BUNDLE_ID"
+
           echo "Provisioning profile diagnostics:"
           echo "- get-task-allow: $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' profile.plist 2>/dev/null || echo 'n/a')"
           echo "- ProvisionsAllDevices: $(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' profile.plist 2>/dev/null || echo 'n/a')"
@@ -155,8 +166,18 @@ jobs:
             perl -0777 -i -pe "s/(CODE_SIGN_STYLE = Manual;\n)/$1\t\t\t\tDEVELOPMENT_TEAM = $TEAM_ID;\n/g" "$PBXPROJ"
             perl -0777 -i -pe "s/PROVISIONING_PROFILE_SPECIFIER = \"[^\"]*\";/PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";/g" "$PBXPROJ"
             perl -0777 -i -pe "s/(DEVELOPMENT_TEAM = $TEAM_ID;\n)/$1\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";\n/g" "$PBXPROJ"
+            perl -0777 -i -pe "s/\"PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\\*\]\" = \"[^\"]*\";/\"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]\" = \"$PROFILE_NAME\";/g" "$PBXPROJ"
             perl -0777 -i -pe "s/\"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]\" = \"[^\"]*\";/\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"$SIGN_IDENTITY\";/g" "$PBXPROJ"
             perl -0777 -i -pe "s/CODE_SIGN_IDENTITY = \"[^\"]*\";/CODE_SIGN_IDENTITY = \"$SIGN_IDENTITY\";/g" "$PBXPROJ"
+
+            # If profile is not wildcard, ensure the app bundle id matches the profile.
+            if [ -n "$PROFILE_BUNDLE_ID" ] && [ "$PROFILE_BUNDLE_ID" != "*" ] && [ "$PROFILE_BUNDLE_ID" != "${TEAM_ID}.*" ]; then
+              echo "Forcing PRODUCT_BUNDLE_IDENTIFIER to match provisioning profile: $PROFILE_BUNDLE_ID"
+              perl -0777 -i -pe "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/PRODUCT_BUNDLE_IDENTIFIER = $PROFILE_BUNDLE_ID;/g" "$PBXPROJ"
+              perl -0777 -i -pe "s/\"PRODUCT_BUNDLE_IDENTIFIER\[sdk=iphoneos\\*\]\" = \"[^\"]*\";/\"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]\" = \"$PROFILE_BUNDLE_ID\";/g" "$PBXPROJ"
+            else
+              echo "Provisioning profile is wildcard or bundle id could not be derived; leaving PRODUCT_BUNDLE_IDENTIFIER unchanged."
+            fi
           else
             echo "Warning: pbxproj not found at $PBXPROJ"
           fi
@@ -167,6 +188,7 @@ jobs:
           echo "IOS_TEAM_ID=$TEAM_ID" >> $GITHUB_ENV
           echo "IOS_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
           echo "IOS_PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV
+          echo "IOS_PROFILE_BUNDLE_ID=$PROFILE_BUNDLE_ID" >> $GITHUB_ENV
 
           echo "Available code signing identities:"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
@@ -245,10 +267,6 @@ jobs:
               -resultBundlePath "$ARCHIVE_RESULT_BUNDLE" \
               -archivePath build/Runner.xcarchive \
               archive \
-              CODE_SIGN_STYLE=Manual \
-              DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
-              PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
-              CODE_SIGN_IDENTITY="$IOS_SIGN_IDENTITY" \
               OTHER_CODE_SIGN_FLAGS="$OTHER_CODE_SIGN_FLAGS" \
               2>&1 | tee xcodebuild-archive.raw.log | xcpretty --no-color; then
               echo "\n--- xcodebuild archive failed: tail raw log ---"
