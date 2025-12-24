@@ -91,7 +91,7 @@ jobs:
       - name: Build iOS app (with codesign if configured)
         working-directory: ./apps/${{ inputs.app_name }}
         run: |
-          if [ -n "${{ inputs.certificate }}" ] && [ -n "${{ inputs.provisioning_profile }}" ]; then
+          if [ -n "${{ inputs.code_signing_id }}" ]; then
             echo "Building with code signing..."
             flutter build ios --release
           else
@@ -117,7 +117,7 @@ jobs:
           compression-level: 0
       
       - name: Cleanup keychain
-        if: ${{ always() && inputs.certificate != '' }}
+        if: ${{ always() && inputs.code_signing_id != '' }}
         run: |
           security delete-keychain build.keychain || true
       
@@ -128,7 +128,7 @@ jobs:
           echo "**App:** ${{ inputs.app_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Build Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "**Artifact:** ios-${{ inputs.app_name }}-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          if [ -n "${{ inputs.certificate }}" ] && [ -n "${{ inputs.provisioning_profile }}" ]; then
+          if [ -n "${{ inputs.code_signing_id }}" ]; then
             echo "**Code Signing:** ✅ Enabled" >> $GITHUB_STEP_SUMMARY
           else
             echo "**Code Signing:** ⚠️ Disabled" >> $GITHUB_STEP_SUMMARY
