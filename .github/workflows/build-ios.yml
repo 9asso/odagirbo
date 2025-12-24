@@ -236,11 +236,13 @@ jobs:
             fi
             echo "Bundle ID: $BUNDLE_ID"
 
-            xcodebuild -workspace ios/Runner.xcworkspace \
+            ARCHIVE_RESULT_BUNDLE="build/Runner-archive.xcresult"
+            if ! xcodebuild -workspace ios/Runner.xcworkspace \
               -scheme Runner \
               -configuration Release \
               -sdk iphoneos \
               -destination 'generic/platform=iOS' \
+              -resultBundlePath "$ARCHIVE_RESULT_BUNDLE" \
               -archivePath build/Runner.xcarchive \
               archive \
               CODE_SIGN_STYLE=Manual \
@@ -248,7 +250,13 @@ jobs:
               PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
               CODE_SIGN_IDENTITY="$IOS_SIGN_IDENTITY" \
               OTHER_CODE_SIGN_FLAGS="$OTHER_CODE_SIGN_FLAGS" \
-              | tee xcodebuild-archive.raw.log | xcpretty
+              2>&1 | tee xcodebuild-archive.raw.log | xcpretty --no-color; then
+              echo "\n--- xcodebuild archive failed: tail raw log ---"
+              tail -n 800 xcodebuild-archive.raw.log || true
+              echo "\n--- xcodebuild archive failed: error summary ---"
+              grep -nE "(^|[^A-Za-z])(fatal error:|error:|ld:|Undefined symbols|CodeSign error|Provisioning profile|No signing certificate|requires a provisioning profile)" xcodebuild-archive.raw.log | tail -n 200 || true
+              exit 1
+            fi
 
             # 3) Export IPA
             BUNDLE_ID="$BUNDLE_ID" IOS_EXPORT_METHOD="$IOS_EXPORT_METHOD" IOS_TEAM_ID="$IOS_TEAM_ID" IOS_PROFILE_NAME="$IOS_PROFILE_NAME" \
@@ -258,15 +266,35 @@ jobs:
             plutil -lint exportOptions.plist || { echo "exportOptions.plist invalid:"; cat exportOptions.plist; exit 1; }
 
             mkdir -p build/ios/ipa
-            xcodebuild -exportArchive \
+            if ! xcodebuild -exportArchive \
               -archivePath build/Runner.xcarchive \
               -exportOptionsPlist exportOptions.plist \
               -exportPath build/ios/ipa \
-              | tee xcodebuild-export.raw.log | xcpretty
+              2>&1 | tee xcodebuild-export.raw.log | xcpretty --no-color; then
+              echo "\n--- xcodebuild exportArchive failed: tail raw log ---"
+              tail -n 800 xcodebuild-export.raw.log || true
+              echo "\n--- xcodebuild exportArchive failed: error summary ---"
+              grep -nE "(^|[^A-Za-z])(fatal error:|error:|ld:|Undefined symbols|CodeSign error|Provisioning profile|No signing certificate|requires a provisioning profile)" xcodebuild-export.raw.log | tail -n 200 || true
+              exit 1
+            fi
           else
             echo "Building without code signing..."
             flutter build ios --release --no-codesign
           fi
+
+      - name: Upload iOS build logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-logs-${{ inputs.app_name }}-${{ github.run_number }}
+          path: |
+            ./apps/${{ inputs.app_name }}/xcodebuild-archive.raw.log
+            ./apps/${{ inputs.app_name }}/xcodebuild-export.raw.log
+            ./apps/${{ inputs.app_name }}/exportOptions.plist
+            ./apps/${{ inputs.app_name }}/build/Runner-archive.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 0
       
       - name: Create IPA archive
         working-directory: ./apps/${{ inputs.app_name }}
