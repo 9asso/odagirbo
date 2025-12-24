@@ -1,0 +1,32 @@
+name: esacapecar
+description: Espace Car Flutter application
+version: 1.0.0+1
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.1.0
+  webview_flutter: ^4.4.2
+  google_mobile_ads: ^5.1.0
+  in_app_purchase: ^3.1.13
+  share_plus: ^10.1.2
+  in_app_review: ^2.0.9
+  http: ^1.2.0
+  shared_preferences: ^2.2.2
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/pack/
+    - assets/config.json
+flutter_launcher_icons:
+  android: true
+  ios: true
+  web:
+    generate: true
+  image_path: assets/pack/appicon.png
