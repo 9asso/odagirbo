@@ -70,7 +70,16 @@ jobs:
           
           # Decode and install provisioning profile
           echo "$PROVISIONING_PROFILE" | base64 --decode > profile.mobileprovision
-          UUID=$(grep -aA1 UUID profile.mobileprovision | grep -o "[-A-F0-9]\{36\}")
+          UUID=$(grep -aA1 UUID profile.mobileprovision | grep -o "[-A-F0-9]\{36\}" | head -1) || {
+            echo "Error: Could not extract UUID from provisioning profile"
+            cat profile.mobileprovision | head -20
+            exit 1
+          }
+          if [ -z "$UUID" ]; then
+            echo "Error: UUID is empty"
+            exit 1
+          fi
+          echo "Provisioning profile UUID: $UUID"
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
           
           # Clean up sensitive files
