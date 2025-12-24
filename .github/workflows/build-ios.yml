@@ -166,6 +166,7 @@ jobs:
           echo "IOS_SIGN_IDENTITY=$SIGN_IDENTITY" >> $GITHUB_ENV
           echo "IOS_TEAM_ID=$TEAM_ID" >> $GITHUB_ENV
           echo "IOS_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "IOS_PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV
 
           echo "Available code signing identities:"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
@@ -195,6 +196,7 @@ jobs:
             echo "Using export method: $IOS_EXPORT_METHOD"
             echo "Using signing identity: $IOS_SIGN_IDENTITY"
             echo "Using keychain: $IOS_KEYCHAIN_PATH"
+            echo "Using profile: $IOS_PROFILE_NAME"
             security unlock-keychain -p "" "$IOS_KEYCHAIN_PATH" || true
             security set-keychain-settings -lut 21600 "$IOS_KEYCHAIN_PATH" || true
             security list-keychains -d user || true
@@ -203,9 +205,63 @@ jobs:
             echo "Identities visible to codesign (all):"
             security find-identity -v -p codesigning || true
 
-            # Force xcodebuild/codesign to use our keychain.
+            # 1) Let Flutter set up iOS project/pods (build unsigned)
+            flutter build ios --release --no-codesign
+
+            # 2) Archive with xcodebuild using manual signing
             export OTHER_CODE_SIGN_FLAGS="--keychain $IOS_KEYCHAIN_PATH"
-            flutter build ipa --release --export-method "$IOS_EXPORT_METHOD"
+
+            BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' ios/Runner/Info.plist 2>/dev/null || true)
+            if [ -z "$BUNDLE_ID" ] || [ "$BUNDLE_ID" = "\$(PRODUCT_BUNDLE_IDENTIFIER)" ]; then
+              BUNDLE_ID=$(xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -showBuildSettings 2>/dev/null | awk -F ' = ' '/PRODUCT_BUNDLE_IDENTIFIER/ {print $2; exit}')
+            fi
+            if [ -z "$BUNDLE_ID" ]; then
+              echo "Error: Could not determine bundle id"
+              exit 1
+            fi
+            echo "Bundle ID: $BUNDLE_ID"
+
+            xcodebuild -workspace ios/Runner.xcworkspace \
+              -scheme Runner \
+              -configuration Release \
+              -archivePath build/Runner.xcarchive \
+              archive \
+              CODE_SIGN_STYLE=Manual \
+              DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+              PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
+              CODE_SIGN_IDENTITY="$IOS_SIGN_IDENTITY" \
+              OTHER_CODE_SIGN_FLAGS="$OTHER_CODE_SIGN_FLAGS" \
+              | xcpretty
+
+            # 3) Export IPA
+            cat > exportOptions.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>$IOS_EXPORT_METHOD</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>teamID</key>
+  <string>$IOS_TEAM_ID</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>$BUNDLE_ID</key>
+    <string>$IOS_PROFILE_NAME</string>
+  </dict>
+  <key>compileBitcode</key>
+  <false/>
+</dict>
+</plist>
+EOF
+
+            mkdir -p build/ios/ipa
+            xcodebuild -exportArchive \
+              -archivePath build/Runner.xcarchive \
+              -exportOptionsPlist exportOptions.plist \
+              -exportPath build/ios/ipa \
+              | xcpretty
           else
             echo "Building without code signing..."
             flutter build ios --release --no-codesign
