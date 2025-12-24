@@ -208,12 +208,26 @@ jobs:
             # 1) Let Flutter set up iOS project/pods (build unsigned)
             flutter build ios --release --no-codesign
 
+            # Some Flutter plugins (via CocoaPods) can incorrectly add *.xcprivacy files to the
+            # Compile Sources phase, which breaks archive builds with:
+            #   no rule to process file ... PrivacyInfo.xcprivacy ... (in target ... from project Pods)
+            # Work around it by removing any *.xcprivacy entries from the Pods project sources lists.
+            PODS_PBXPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
+            if [ -f "$PODS_PBXPROJ" ]; then
+              echo "Patching Pods project to remove *.xcprivacy from Sources..."
+              perl -i -ne 'print unless /\.xcprivacy in Sources/' "$PODS_PBXPROJ"
+            fi
+
             # 2) Archive with xcodebuild using manual signing
             export OTHER_CODE_SIGN_FLAGS="--keychain $IOS_KEYCHAIN_PATH"
 
             BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' ios/Runner/Info.plist 2>/dev/null || true)
             if [ -z "$BUNDLE_ID" ] || [ "$BUNDLE_ID" = "\$(PRODUCT_BUNDLE_IDENTIFIER)" ]; then
-              BUNDLE_ID=$(xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -showBuildSettings 2>/dev/null | awk -F ' = ' '/PRODUCT_BUNDLE_IDENTIFIER/ {print $2; exit}')
+              # Prefer the project's pbxproj value to avoid accidentally matching unrelated build settings.
+              BUNDLE_ID=$(grep -m1 -E 'PRODUCT_BUNDLE_IDENTIFIER = [^;]+' ios/Runner.xcodeproj/project.pbxproj | sed -E 's/^.*PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/\1/' | tr -d '[:space:]')
+            fi
+            if [ -z "$BUNDLE_ID" ]; then
+              BUNDLE_ID=$(xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -showBuildSettings 2>/dev/null | awk -F ' = ' '/^\s*PRODUCT_BUNDLE_IDENTIFIER\s*=\s*/ {gsub(/\r/,"",$2); print $2; exit}')
             fi
             if [ -z "$BUNDLE_ID" ]; then
               echo "Error: Could not determine bundle id"
@@ -236,6 +250,9 @@ jobs:
             # 3) Export IPA
             BUNDLE_ID="$BUNDLE_ID" IOS_EXPORT_METHOD="$IOS_EXPORT_METHOD" IOS_TEAM_ID="$IOS_TEAM_ID" IOS_PROFILE_NAME="$IOS_PROFILE_NAME" \
               python3 -c 'import os; b=os.environ.get("BUNDLE_ID","").strip(); m=os.environ.get("IOS_EXPORT_METHOD","").strip(); t=os.environ.get("IOS_TEAM_ID","").strip(); p=os.environ.get("IOS_PROFILE_NAME","").strip(); assert b and m and t and p, f"Missing values: bundle_id={bool(b)} method={bool(m)} team_id={bool(t)} profile_name={bool(p)}"; plist=("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\\n" "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\\n" "<plist version=\"1.0\">\\n" "<dict>\\n" "  <key>method</key>\\n" f"  <string>{m}</string>\\n" "  <key>signingStyle</key>\\n" "  <string>manual</string>\\n" "  <key>teamID</key>\\n" f"  <string>{t}</string>\\n" "  <key>provisioningProfiles</key>\\n" "  <dict>\\n" f"    <key>{b}</key>\\n" f"    <string>{p}</string>\\n" "  </dict>\\n" "  <key>compileBitcode</key>\\n" "  <false/>\\n" "</dict>\\n" "</plist>\\n"); open("exportOptions.plist","w",encoding="utf-8").write(plist); print("Wrote exportOptions.plist")'
+
+            echo "Validating exportOptions.plist..."
+            plutil -lint exportOptions.plist || { echo "exportOptions.plist invalid:"; cat exportOptions.plist; exit 1; }
 
             mkdir -p build/ios/ipa
             xcodebuild -exportArchive \
