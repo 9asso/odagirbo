@@ -70,20 +70,20 @@ jobs:
           
           # Decode and install provisioning profile
           echo "$PROVISIONING_PROFILE" | base64 --decode > profile.mobileprovision
-          UUID=$(grep -aA1 UUID profile.mobileprovision | grep -o "[-A-F0-9]\{36\}" | head -1) || {
-            echo "Error: Could not extract UUID from provisioning profile"
-            cat profile.mobileprovision | head -20
-            exit 1
-          }
+          # The UUID is inside the embedded plist; grep can fail depending on encoding.
+          security cms -D -i profile.mobileprovision > profile.plist
+          UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' profile.plist 2>/dev/null || true)
           if [ -z "$UUID" ]; then
-            echo "Error: UUID is empty"
+            echo "Error: Could not extract UUID from provisioning profile plist"
+            echo "Dumping profile plist top-level keys:"
+            /usr/libexec/PlistBuddy -c 'Print' profile.plist | head -200 || true
             exit 1
           fi
           echo "Provisioning profile UUID: $UUID"
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
           
           # Clean up sensitive files
-          rm certificate.p12 profile.mobileprovision
+          rm certificate.p12 profile.mobileprovision profile.plist
           
           echo "Code signing configured successfully"
       
