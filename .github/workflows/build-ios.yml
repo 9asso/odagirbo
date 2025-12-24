@@ -235,28 +235,7 @@ jobs:
 
             # 3) Export IPA
             BUNDLE_ID="$BUNDLE_ID" IOS_EXPORT_METHOD="$IOS_EXPORT_METHOD" IOS_TEAM_ID="$IOS_TEAM_ID" IOS_PROFILE_NAME="$IOS_PROFILE_NAME" \
-              python3 -c 'import os; b=os.environ.get("BUNDLE_ID","").strip(); m=os.environ.get("IOS_EXPORT_METHOD","").strip(); t=os.environ.get("IOS_TEAM_ID","").strip(); p=os.environ.get("IOS_PROFILE_NAME","").strip();
-assert b and m and t and p, f"Missing values: bundle_id={bool(b)} method={bool(m)} team_id={bool(t)} profile_name={bool(p)}";
-plist=("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-      "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
-      "<plist version=\"1.0\">\n"
-      "<dict>\n"
-      "  <key>method</key>\n"
-      f"  <string>{m}</string>\n"
-      "  <key>signingStyle</key>\n"
-      "  <string>manual</string>\n"
-      "  <key>teamID</key>\n"
-      f"  <string>{t}</string>\n"
-      "  <key>provisioningProfiles</key>\n"
-      "  <dict>\n"
-      f"    <key>{b}</key>\n"
-      f"    <string>{p}</string>\n"
-      "  </dict>\n"
-      "  <key>compileBitcode</key>\n"
-      "  <false/>\n"
-      "</dict>\n"
-      "</plist>\n");
-open("exportOptions.plist","w",encoding="utf-8").write(plist); print("Wrote exportOptions.plist")'
+              python3 -c 'import os; b=os.environ.get("BUNDLE_ID","").strip(); m=os.environ.get("IOS_EXPORT_METHOD","").strip(); t=os.environ.get("IOS_TEAM_ID","").strip(); p=os.environ.get("IOS_PROFILE_NAME","").strip(); assert b and m and t and p, f"Missing values: bundle_id={bool(b)} method={bool(m)} team_id={bool(t)} profile_name={bool(p)}"; plist=("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\\n" "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\\n" "<plist version=\"1.0\">\\n" "<dict>\\n" "  <key>method</key>\\n" f"  <string>{m}</string>\\n" "  <key>signingStyle</key>\\n" "  <string>manual</string>\\n" "  <key>teamID</key>\\n" f"  <string>{t}</string>\\n" "  <key>provisioningProfiles</key>\\n" "  <dict>\\n" f"    <key>{b}</key>\\n" f"    <string>{p}</string>\\n" "  </dict>\\n" "  <key>compileBitcode</key>\\n" "  <false/>\\n" "</dict>\\n" "</plist>\\n"); open("exportOptions.plist","w",encoding="utf-8").write(plist); print("Wrote exportOptions.plist")'
 
             mkdir -p build/ios/ipa
             xcodebuild -exportArchive \
