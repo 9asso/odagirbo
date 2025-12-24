@@ -234,27 +234,43 @@ jobs:
               | xcpretty
 
             # 3) Export IPA
-            cat > exportOptions.plist <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
+            BUNDLE_ID="$BUNDLE_ID" IOS_EXPORT_METHOD="$IOS_EXPORT_METHOD" IOS_TEAM_ID="$IOS_TEAM_ID" IOS_PROFILE_NAME="$IOS_PROFILE_NAME" \
+              python3 - <<'PY'
+import os
+
+bundle_id = os.environ.get('BUNDLE_ID', '').strip()
+method = os.environ.get('IOS_EXPORT_METHOD', '').strip()
+team_id = os.environ.get('IOS_TEAM_ID', '').strip()
+profile_name = os.environ.get('IOS_PROFILE_NAME', '').strip()
+
+if not bundle_id or not method or not team_id or not profile_name:
+    raise SystemExit(f"Missing values: bundle_id={bool(bundle_id)} method={bool(method)} team_id={bool(team_id)} profile_name={bool(profile_name)}")
+
+plist = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>method</key>
-  <string>$IOS_EXPORT_METHOD</string>
+  <string>{method}</string>
   <key>signingStyle</key>
   <string>manual</string>
   <key>teamID</key>
-  <string>$IOS_TEAM_ID</string>
+  <string>{team_id}</string>
   <key>provisioningProfiles</key>
   <dict>
-    <key>$BUNDLE_ID</key>
-    <string>$IOS_PROFILE_NAME</string>
+    <key>{bundle_id}</key>
+    <string>{profile_name}</string>
   </dict>
   <key>compileBitcode</key>
   <false/>
 </dict>
 </plist>
-EOF
+'''
+
+with open('exportOptions.plist', 'w', encoding='utf-8') as f:
+    f.write(plist)
+print('Wrote exportOptions.plist')
+PY
 
             mkdir -p build/ios/ipa
             xcodebuild -exportArchive \
@@ -273,7 +289,7 @@ EOF
           if [ -n "${{ inputs.code_signing_id }}" ]; then
             IPA_PATH=$(ls -1 build/ios/ipa/*.ipa 2>/dev/null | head -1 || true)
             if [ -z "$IPA_PATH" ]; then
-              echo "Error: flutter build ipa did not produce an ipa under build/ios/ipa"
+              echo "Error: xcodebuild export did not produce an ipa under build/ios/ipa"
               find build/ios -maxdepth 4 -type f -name "*.ipa" -print || true
               exit 1
             fi
