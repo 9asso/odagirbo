@@ -19,9 +19,9 @@
       "interstitialAdUnitId": "ca-app-pub-3940256099942544/1033173712"
     },
     "ios": {
-      "appId": "ca-app-pub-3940256099942544~1458002511",
-      "bannerAdUnitId": "ca-app-pub-3940256099942544/2934735716",
-      "interstitialAdUnitId": "ca-app-pub-3940256099942544/4411468910"
+      "appId": "ca-app-pub-5080833301669041~5795935279",
+      "bannerAdUnitId": "ca-app-pub-5080833301669041/2658636046",
+      "interstitialAdUnitId": "ca-app-pub-5080833301669041/7078061503"
     }
   },
   "game": {
@@ -33,7 +33,7 @@
     },
     "interstitial": {
       "enabled": true,
-      "interval": 90,
+      "interval": 180,
       "countdownPosition": "topLeft"
     },
     "menu": {
@@ -63,7 +63,7 @@
           "message": "Check out this amazing game!"
         },
         "moreGames": {
-          "enabled": true,
+          "enabled": false,
           "image": "assets/pack/more.png",
           "label": "More Games"
         },
@@ -94,7 +94,7 @@
       }
     },
     "userInfo": {
-      "enabled": true,
+      "enabled": false,
       "images": {
         "background": "assets/pack/bg.png",
         "close": "assets/pack/close.png",
@@ -142,7 +142,8 @@
           "label": "Hard"
         }
       },
-      "unselectedOpacity": 0.3
+      "unselectedOpacity": 0.3,
+      "titleImage": "assets/pack/difficultyTitleImage.png"
     },
     "moreGames": {
       "enabled": false,
@@ -179,22 +180,20 @@
         "loadingEmpty": "assets/pack/loadingempty.png"
       },
       "progressBar": {
-        "width": 310,
-        "height": 24,
-        "borderRadius": 10
+        "width": 300,
+        "height": 16,
+        "borderRadius": 100
       }
     }
   },
   "subscription": {
     "enabled": true,
     "types": [
-      "weekly",
-      "monthly",
-      "lifetime"
+      "weekly"
     ],
     "productIds": {
-      "android": "subscription_no_ads",
-      "ios": "subscription_no_ads"
+      "android": "weekly_no_ads",
+      "ios": "weekly_no_ads"
     },
     "popup": {
       "barrierDismissible": false,
@@ -209,7 +208,7 @@
       "content": {
         "iconHeight": 80,
         "title": {
-          "text": "NO ADS!",
+          "text": "",
           "fontSize": 40,
           "fontWeight": "bold",
           "color": "#FFC800",
@@ -217,7 +216,7 @@
           "shadowBlurRadius": 3
         },
         "subtitle": {
-          "text": "Enjoy an uninterrupted experience!",
+          "text": "",
           "fontSize": 16,
           "fontWeight": "w600",
           "color": "#5F3190",
@@ -225,7 +224,7 @@
           "shadowBlurRadius": 1
         },
         "price": {
-          "text": "$7.99",
+          "text": "$5.99",
           "fontSize": 24,
           "fontWeight": "bold",
           "color": "#FFFFFF",
@@ -238,12 +237,13 @@
         "right": -10,
         "height": 40
       }
-    }
+    },
+    "type": "weekly"
   },
   "theme": {
     "primaryColor": "#ffffff",
-    "accentColor": "#ffffff",
-    "errorColor": "#ffffff"
+    "accentColor": "#ffb347",
+    "errorColor": "#c5ff24"
   },
   "animation": {
     "buttonPressDuration": 150,

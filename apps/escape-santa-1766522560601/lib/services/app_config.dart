@@ -182,6 +182,9 @@ class AppConfig {
       'Email is too long (max 100 characters)';
 
   // Difficulty
+  String get difficultyTitleImage =>
+      _config['screens']['difficulty']['titleImage'] ??
+      'assets/pack/difficultytitle.png';
   String get difficultyBackgroundImage =>
       _config['screens']['difficulty']['images']['background'] ??
       'assets/pack/bg.png';

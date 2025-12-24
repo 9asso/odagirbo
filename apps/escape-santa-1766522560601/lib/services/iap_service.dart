@@ -111,12 +111,13 @@ class IAPService {
     final Set<String> productIds = {};
     final platform = Platform.isAndroid ? 'android' : 'ios';
     
-    // Load all subscription types
-    for (final type in _config.subscriptionTypes) {
-      final productId = _config.getSubscriptionProductId(type, platform);
-      if (productId.isNotEmpty) {
-        productIds.add(productId);
-      }
+    // Use the single product ID for the platform
+    final productId = platform == 'android' 
+        ? _config.androidSubscriptionProductId 
+        : _config.iosSubscriptionProductId;
+    
+    if (productId.isNotEmpty) {
+      productIds.add(productId);
     }
 
     if (productIds.isEmpty) {
@@ -125,22 +126,31 @@ class IAPService {
     }
 
     print('Loading products: $productIds');
-    final ProductDetailsResponse response = await _iap.queryProductDetails(productIds);
     
-    if (response.notFoundIDs.isNotEmpty) {
-      print('Products not found: ${response.notFoundIDs}');
-    }
+    try {
+      final ProductDetailsResponse response = await _iap.queryProductDetails(productIds);
+      
+      if (response.notFoundIDs.isNotEmpty) {
+        print('⚠️  Products not found: ${response.notFoundIDs}');
+        print('⚠️  Make sure products are configured in App Store Connect / Google Play Console');
+        print('⚠️  Note: IAP does not work on iOS Simulator - use a real device');
+      }
 
-    if (response.error != null) {
-      print('Error loading products: ${response.error}');
-      return;
-    }
+      if (response.error != null) {
+        print('⚠️  Error loading products: ${response.error}');
+        print('⚠️  App will continue without IAP support');
+        return;
+      }
 
-    for (final product in response.productDetails) {
-      _products[product.id] = product;
+      for (final product in response.productDetails) {
+        _products[product.id] = product;
+      }
+      
+      print('✅ Loaded ${_products.length} products');
+    } catch (e) {
+      print('⚠️  Exception loading products: $e');
+      print('⚠️  App will continue without IAP support');
     }
-    
-    print('Loaded ${_products.length} products');
   }
 
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
@@ -225,22 +235,24 @@ class IAPService {
     if (_products.isEmpty) {
       await _loadProducts();
       if (_products.isEmpty) {
-        onError('Products not found');
+        onError('Subscription not available. Please try again later or contact support.');
         return false;
       }
     }
 
     final platform = Platform.isAndroid ? 'android' : 'ios';
-    final productId = _config.getSubscriptionProductId(type, platform);
+    final productId = platform == 'android' 
+        ? _config.androidSubscriptionProductId 
+        : _config.iosSubscriptionProductId;
     
     if (productId.isEmpty) {
-      onError('Product ID not configured for $type');
+      onError('Product ID not configured');
       return false;
     }
 
     final ProductDetails? productDetails = _products[productId];
     if (productDetails == null) {
-      onError('Product not found: $productId');
+      onError('Subscription product not available. Please try again later.');
       return false;
     }
 

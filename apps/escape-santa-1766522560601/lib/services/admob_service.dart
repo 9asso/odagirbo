@@ -133,6 +133,16 @@ class AdMobService {
       return;
     }
 
+    // Check if user has active subscription - don't show ads if subscribed
+    final shouldShow = await shouldShowAds();
+    if (!shouldShow) {
+      print('User has active subscription - skipping interstitial ad');
+      if (onAdDismissed != null) {
+        onAdDismissed();
+      }
+      return;
+    }
+
     // Load ad if not ready
     if (!_isInterstitialAdReady || _interstitialAd == null) {
       await _loadInterstitialAdAsync(

@@ -74,7 +74,7 @@ class _DifficultyScreenState extends State<DifficultyScreen>
     if (_config.admobEnabled && AdMobService.isSupported) {
       final adMobService = await AdMobService.getInstance();
       final shouldShowAds = await adMobService.shouldShowAds();
-      
+
       if (shouldShowAds) {
         _bannerAd = adMobService.createBannerAd();
         _bannerAd!.load().then((_) {
@@ -154,10 +154,11 @@ class _DifficultyScreenState extends State<DifficultyScreen>
         );
       }
 
-      // Use 'monthly' as default subscription type
-      // You can show a selection dialog here if you want to offer multiple types
+      // Use subscription type from config (first type in the types array)
       await iapService.purchaseSubscription(
-        type: 'monthly', // Change to show selection: 'weekly', 'monthly', or 'lifetime'
+        type: _config.subscriptionTypes.isNotEmpty 
+            ? _config.subscriptionTypes.first 
+            : 'weekly',
         onSuccess: () {
           if (mounted) {
             Navigator.of(context).pop(); // Close loading dialog
@@ -230,32 +231,65 @@ class _DifficultyScreenState extends State<DifficultyScreen>
         child: Stack(
           children: [
             SafeArea(
-              child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildDifficultyButton(
-                      _config.difficultyHardLabel,
-                      Colors.red,
-                      _config.difficultyHardImage,
-                      _hardButtonController,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  // Title at top
+                  Padding(
+                    padding: const EdgeInsets.only(top: 0),
+                    child: SizedBox(
+                      height: 100,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.asset(
+                          _config.difficultyTitleImage,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Center(
+                              child: Text(
+                                'Choose Difficulty',
+                                style: TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.deepPurple,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 25),
-                    _buildDifficultyButton(
-                      _config.difficultyNormalLabel,
-                      Colors.orange,
-                      _config.difficultyNormalImage,
-                      _normalButtonController,
-                    ),
-                    const SizedBox(width: 25),
-                    _buildDifficultyButton(
-                      _config.difficultyEasyLabel,
-                      Colors.green,
-                      _config.difficultyEasyImage,
-                      _easyButtonController,
-                    ),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(height: 25),
+
+                  // Difficulty selection buttons in the middle
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildDifficultyButton(
+                        _config.difficultyHardLabel,
+                        Colors.red,
+                        _config.difficultyHardImage,
+                        _hardButtonController,
+                      ),
+                      const SizedBox(width: 25),
+                      _buildDifficultyButton(
+                        _config.difficultyNormalLabel,
+                        Colors.orange,
+                        _config.difficultyNormalImage,
+                        _normalButtonController,
+                      ),
+                      const SizedBox(width: 25),
+                      _buildDifficultyButton(
+                        _config.difficultyEasyLabel,
+                        Colors.green,
+                        _config.difficultyEasyImage,
+                        _easyButtonController,
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
 
@@ -397,21 +431,8 @@ class _DifficultyScreenState extends State<DifficultyScreen>
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      // No Ads Icon
-                                      Image.asset(
-                                        _config.subscriptionIconImage,
-                                        height: _config.subscriptionIconHeight,
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
-                                          return const Icon(
-                                            Icons.block,
-                                            size: 120,
-                                            color: Colors.white,
-                                          );
-                                        },
-                                      ),
-
-                                      const SizedBox(height: 0),
+                                      
+                                      const SizedBox(height: 120),
 
                                       // NO ADS! Text
                                       Text(
@@ -456,7 +477,7 @@ class _DifficultyScreenState extends State<DifficultyScreen>
                                         ),
                                       ),
 
-                                      const SizedBox(height: 15),
+                                      const SizedBox(height: 25),
 
                                       // Price Tag with Text - Tappable
                                       GestureDetector(
@@ -483,26 +504,6 @@ class _DifficultyScreenState extends State<DifficultyScreen>
                                                 );
                                               },
                                             ),
-                                            Positioned(
-                                              child: Text(
-                                                _config.subscriptionPriceText,
-                                                style: TextStyle(
-                                                  fontSize: _config
-                                                      .subscriptionPriceFontSize,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: _config
-                                                      .subscriptionPriceColor,
-                                                  shadows: [
-                                                    Shadow(
-                                                      color: _config
-                                                          .subscriptionPriceShadowColor,
-                                                      blurRadius: _config
-                                                          .subscriptionPriceShadowBlurRadius,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
                                           ],
                                         ),
                                       ),
@@ -514,7 +515,7 @@ class _DifficultyScreenState extends State<DifficultyScreen>
                               // Close button at top right
                               Positioned(
                                 top: _config.subscriptionCloseButtonTop,
-                                right: _config.subscriptionCloseButtonRight,
+                                left: _config.subscriptionCloseButtonRight,
                                 child: GestureDetector(
                                   onTap: _closeSubscriptionPopup,
                                   child: Image.asset(

@@ -125,11 +125,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ..setBackgroundColor(Colors.black)
       ..setUserAgent('Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
       ..enableZoom(false)
+      ..setOnConsoleMessage((JavaScriptConsoleMessage message) {
+        print('🌐 WebView Console: ${message.message}');
+      })
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (NavigationRequest request) {
-            // Allow all navigation requests (including redirects)
-            // print('🔗 Navigation requested: ${request.url}');
+            // Block about:blank (popups)
+            if (request.url == 'about:blank' || request.url.startsWith('about:blank')) {
+              print('🚫 Blocked popup: ${request.url}');
+              return NavigationDecision.prevent;
+            }
+            // Block requests containing 'games-sdk.playhop.com'
+            if (request.url.contains('games-sdk.playhop.com')) {
+              print('🚫 Blocked request: ${request.url}');
+              return NavigationDecision.prevent;
+            }
+            // Allow all other navigation requests (including redirects)
+            print('🔗 Navigation requested: ${request.url}');
             return NavigationDecision.navigate;
           },
           onPageStarted: (String url) {
@@ -144,7 +157,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             });
           },
           onPageFinished: (String url) {
-            // print('✅ Page finished loading: $url');
+            print('✅ Page finished loading: $url');
+            
+            // Inject JavaScript to remove unwanted modals
+            _injectModalBlocker();
+            
             setState(() {
               _isLoading = false;
               _showSplash = _config.gameLoaderEnabled; // Show splash based on config
@@ -173,6 +190,117 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
       )
       ..loadRequest(Uri.parse(_config.gameUrl));
+  }
+
+  void _injectModalBlocker() {
+    // Inject JavaScript to automatically dismiss the modal (mobile version)
+    final script = '''
+      (function() {
+        const processedModals = new Set();
+        
+        function closeModal() {
+          let foundNewModal = false;
+          
+          // Method 1: Click on backdrop/overlay (only if visible and not GDPR)
+          const overlays = document.querySelectorAll('.modal-wrapper, [class*="overlay"], [class*="backdrop"]');
+          overlays.forEach(overlay => {
+            // Skip GDPR overlay and already processed ones
+            if (overlay.classList.contains('gdpr-overlay')) return;
+            
+            // Only process if visible
+            const isVisible = overlay.offsetParent !== null && 
+                            window.getComputedStyle(overlay).display !== 'none' &&
+                            window.getComputedStyle(overlay).visibility !== 'hidden';
+            
+            if (isVisible && !processedModals.has(overlay)) {
+              console.log('🖱️ Clicking overlay:', overlay.className);
+              overlay.click();
+              processedModals.add(overlay);
+              foundNewModal = true;
+            }
+          });
+          
+          // Method 2: Find and click close button
+          const closeButtons = document.querySelectorAll('.close-button, .close-button_type_popup, [aria-label*="close" i], [aria-label*="закрыть" i]');
+          closeButtons.forEach(button => {
+            const isVisible = button.offsetParent !== null;
+            if (isVisible && !processedModals.has(button)) {
+              console.log('🖱️ Clicking close button:', button.className);
+              button.click();
+              processedModals.add(button);
+              foundNewModal = true;
+            }
+          });
+          
+          // Method 3: Simulate swipe down on payment modals
+          const modals = document.querySelectorAll('[data-testid="in-app-form"], .inAppForm, [class*="PaymentsModal"]');
+          modals.forEach(modal => {
+            const isVisible = modal.offsetParent !== null;
+            if (isVisible && !processedModals.has(modal)) {
+              const modalContent = modal.querySelector('[class*="modal"]') || modal;
+              
+              const touchStart = new TouchEvent('touchstart', {
+                touches: [new Touch({
+                  identifier: Date.now(),
+                  target: modalContent,
+                  clientX: 100,
+                  clientY: 50,
+                  pageX: 100,
+                  pageY: 50
+                })]
+              });
+              
+              const touchEnd = new TouchEvent('touchend', {
+                changedTouches: [new Touch({
+                  identifier: Date.now(),
+                  target: modalContent,
+                  clientX: 100,
+                  clientY: 300,
+                  pageX: 100,
+                  pageY: 300
+                })]
+              });
+              
+              console.log('👆 Simulating swipe down on payment modal');
+              modalContent.dispatchEvent(touchStart);
+              setTimeout(() => modalContent.dispatchEvent(touchEnd), 50);
+              processedModals.add(modal);
+              foundNewModal = true;
+            }
+          });
+          
+          if (foundNewModal) {
+            console.log('✅ Modal dismissed');
+          }
+        }
+        
+        // Run immediately
+        console.log('🚀 Modal blocker initialized');
+        closeModal();
+        
+        // Run every 1 second to catch modals quickly
+        setInterval(closeModal, 1000);
+        
+        // Watch for DOM changes (only for new modal additions)
+        const observer = new MutationObserver((mutations) => {
+          const hasNewModal = mutations.some(m => 
+            Array.from(m.addedNodes).some(node => 
+              node.nodeType === 1 && 
+              (node.classList?.contains('modal-wrapper') || 
+               node.classList?.contains('inAppForm') ||
+               node.dataset?.testid === 'in-app-form')
+            )
+          );
+          if (hasNewModal) {
+            console.log('🔄 New modal detected');
+            closeModal();
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      })();
+    ''';
+    
+    _controller?.runJavaScript(script);
   }
 
   void _toggleMenu() {
@@ -219,91 +347,79 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           // Splash screen after loading
           if (_showSplash)
             Container(
-              color: Colors.black,
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage(
+                    _config.splashBackgroundImage,
+                  ),
+                  fit: BoxFit.cover,
+                ),
+              ),
               child: Center(
-                child: FadeTransition(
-                  opacity: _splashAnimationController,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.5, end: 1.0).animate(
-                      CurvedAnimation(
-                        parent: _splashAnimationController,
-                        curve: Curves.easeOutBack,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // App Icon
+                    SizedBox(
+                      height: 80,
+                      child: ClipRRect(
+                        child: Image.asset(
+                          _config.splashLoadingTextImage,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
+                              Icons.gamepad,
+                              size: 80,
+                              color: Colors.deepPurple,
+                            );
+                          },
+                        ),
                       ),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+
+                    const SizedBox(height: 25),
+
+                    // Loading Icon with Progress Bar
+                    Stack(
+                      alignment: Alignment.center,
                       children: [
-                        SlideTransition(
-                          position: Tween<Offset>(
-                            begin: Offset.zero,
-                            end: const Offset(0, -0.1),
-                          ).animate(
-                            CurvedAnimation(
-                              parent: _bounceAnimationController,
-                              curve: Curves.easeInOut,
-                            ),
-                          ),
+                        // Loading Icon
+                        SizedBox(
+                          width: 350,
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
                             child: Image.asset(
-                              _config.appIcon,
-                              width: 100,
-                              height: 100,
+                              _config.splashLoadingEmptyImage,
+                              fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: 100,
-                                  height: 100,
-                                  decoration: BoxDecoration(
-                                    color: _config.primaryColor,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const Icon(
-                                    Icons.gamepad,
-                                    size: 70,
-                                    color: Color.fromARGB(107, 255, 255, 255),
-                                  ),
+                                return const Icon(
+                                  Icons.gamepad,
+                                  size: 80,
+                                  color: Colors.deepPurple,
                                 );
                               },
                             ),
                           ),
                         ),
-                        const SizedBox(height: 15),
-                        Text(
-                          _config.appTitle,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 36,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2.0,
-                            shadows: [
-                              Shadow(
-                                color: _config.primaryColor.withOpacity(0.5),
-                                offset: const Offset(0, 2),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 25),
+                        
+                        // Loading Bar
                         Container(
-                          width: 200,
-                          height: 6,
+                          width: _config.splashProgressBarWidth,
+                          height: _config.splashProgressBarHeight,
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(3),
+                            color: Colors.white.withOpacity(0),
+                            borderRadius: BorderRadius.circular(_config.splashProgressBarBorderRadius),
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(3),
+                            borderRadius: BorderRadius.circular(_config.splashProgressBarBorderRadius),
                             child: LinearProgressIndicator(
-                              backgroundColor: Colors.white,
-                              valueColor: AlwaysStoppedAnimation<Color>(_config.accentColor),
+                              backgroundColor: Colors.transparent,
+                              valueColor: AlwaysStoppedAnimation<Color>(_config.primaryColor),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -388,7 +504,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           children: [
             Image.asset(
               imagePath,
-              height: 60,
+              height: 100,
+              fit: BoxFit.fill,
               errorBuilder: (context, error, stackTrace) {
                 return Icon(Icons.error, color: _config.primaryColor, size: 24);
               },
