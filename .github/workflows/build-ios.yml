@@ -191,6 +191,7 @@ jobs:
       - name: Build iOS app (with codesign if configured)
         working-directory: ./apps/${{ inputs.app_name }}
         run: |
+          set -o pipefail
           if [ -n "${{ inputs.code_signing_id }}" ]; then
             echo "Building with code signing..."
             echo "Using export method: $IOS_EXPORT_METHOD"
@@ -238,6 +239,8 @@ jobs:
             xcodebuild -workspace ios/Runner.xcworkspace \
               -scheme Runner \
               -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
               -archivePath build/Runner.xcarchive \
               archive \
               CODE_SIGN_STYLE=Manual \
@@ -245,11 +248,11 @@ jobs:
               PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
               CODE_SIGN_IDENTITY="$IOS_SIGN_IDENTITY" \
               OTHER_CODE_SIGN_FLAGS="$OTHER_CODE_SIGN_FLAGS" \
-              | xcpretty
+              | tee xcodebuild-archive.raw.log | xcpretty
 
             # 3) Export IPA
             BUNDLE_ID="$BUNDLE_ID" IOS_EXPORT_METHOD="$IOS_EXPORT_METHOD" IOS_TEAM_ID="$IOS_TEAM_ID" IOS_PROFILE_NAME="$IOS_PROFILE_NAME" \
-              python3 -c 'import os; b=os.environ.get("BUNDLE_ID","").strip(); m=os.environ.get("IOS_EXPORT_METHOD","").strip(); t=os.environ.get("IOS_TEAM_ID","").strip(); p=os.environ.get("IOS_PROFILE_NAME","").strip(); assert b and m and t and p, f"Missing values: bundle_id={bool(b)} method={bool(m)} team_id={bool(t)} profile_name={bool(p)}"; plist=("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\\n" "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\\n" "<plist version=\"1.0\">\\n" "<dict>\\n" "  <key>method</key>\\n" f"  <string>{m}</string>\\n" "  <key>signingStyle</key>\\n" "  <string>manual</string>\\n" "  <key>teamID</key>\\n" f"  <string>{t}</string>\\n" "  <key>provisioningProfiles</key>\\n" "  <dict>\\n" f"    <key>{b}</key>\\n" f"    <string>{p}</string>\\n" "  </dict>\\n" "  <key>compileBitcode</key>\\n" "  <false/>\\n" "</dict>\\n" "</plist>\\n"); open("exportOptions.plist","w",encoding="utf-8").write(plist); print("Wrote exportOptions.plist")'
+              python3 -c 'import os, plistlib; b=os.environ["BUNDLE_ID"].strip(); m=os.environ["IOS_EXPORT_METHOD"].strip(); t=os.environ["IOS_TEAM_ID"].strip(); p=os.environ["IOS_PROFILE_NAME"].strip(); d={"method":m,"signingStyle":"manual","teamID":t,"provisioningProfiles":{b:p},"compileBitcode":False}; plistlib.dump(d, open("exportOptions.plist","wb"), fmt=plistlib.FMT_XML); print("Wrote exportOptions.plist")'
 
             echo "Validating exportOptions.plist..."
             plutil -lint exportOptions.plist || { echo "exportOptions.plist invalid:"; cat exportOptions.plist; exit 1; }
@@ -259,7 +262,7 @@ jobs:
               -archivePath build/Runner.xcarchive \
               -exportOptionsPlist exportOptions.plist \
               -exportPath build/ios/ipa \
-              | xcpretty
+              | tee xcodebuild-export.raw.log | xcpretty
           else
             echo "Building without code signing..."
             flutter build ios --release --no-codesign
