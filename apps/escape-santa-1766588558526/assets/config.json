@@ -19,14 +19,14 @@
       "interstitialAdUnitId": "ca-app-pub-3940256099942544/1033173712"
     },
     "ios": {
-      "appId": "ca-app-pub-3940256099942544~1458002511",
-      "bannerAdUnitId": "ca-app-pub-3940256099942544/2934735716",
-      "interstitialAdUnitId": "ca-app-pub-3940256099942544/4411468910"
+      "appId": "ca-app-pub-5080833301669041~5795935279",
+      "bannerAdUnitId": "ca-app-pub-5080833301669041/2658636046",
+      "interstitialAdUnitId": "ca-app-pub-5080833301669041/7078061503"
     }
   },
   "game": {
     "enabled": true,
-    "url": "",
+    "url": "https://playhop.com/dist-app/481662?header=no&skip-guard=1&utm_source=parent_window_api&utm_medium=playgama",
     "loader": {
       "enabled": true,
       "duration": 15
@@ -63,7 +63,7 @@
           "message": "Check out this amazing game!"
         },
         "moreGames": {
-          "enabled": true,
+          "enabled": false,
           "image": "assets/pack/more.png",
           "label": "More Games"
         },
@@ -180,9 +180,9 @@
         "loadingEmpty": "assets/pack/loadingempty.png"
       },
       "progressBar": {
-        "width": 310,
-        "height": 24,
-        "borderRadius": 10
+        "width": 300,
+        "height": 20,
+        "borderRadius": 100
       }
     }
   },
@@ -194,8 +194,8 @@
       "lifetime"
     ],
     "productIds": {
-      "android": "subscription_no_ads",
-      "ios": "subscription_no_ads"
+      "android": "com.week.santalevels",
+      "ios": "com.week.santalevels"
     },
     "popup": {
       "barrierDismissible": false,
@@ -210,7 +210,7 @@
       "content": {
         "iconHeight": 80,
         "title": {
-          "text": "NO ADS!",
+          "text": "",
           "fontSize": 40,
           "fontWeight": "bold",
           "color": "#FFC800",
@@ -218,7 +218,7 @@
           "shadowBlurRadius": 3
         },
         "subtitle": {
-          "text": "Enjoy an uninterrupted experience!",
+          "text": "",
           "fontSize": 16,
           "fontWeight": "w600",
           "color": "#5F3190",
@@ -226,7 +226,7 @@
           "shadowBlurRadius": 1
         },
         "price": {
-          "text": "$7.99",
+          "text": "$4.99",
           "fontSize": 24,
           "fontWeight": "bold",
           "color": "#FFFFFF",
@@ -239,12 +239,13 @@
         "right": -10,
         "height": 40
       }
-    }
+    },
+    "type": "weekly"
   },
   "theme": {
-    "primaryColor": "#6366F1",
-    "accentColor": "#EC4899",
-    "errorColor": "#F44336"
+    "primaryColor": "#ffffff",
+    "accentColor": "#d0ec46",
+    "errorColor": "#f4a434"
   },
   "animation": {
     "buttonPressDuration": 150,
