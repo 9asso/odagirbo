@@ -238,6 +238,17 @@
         "top": -10,
         "right": -10,
         "height": 40
+      },
+      "footer": {
+        "restore": {
+          "image": "assets/pack/restore.png"
+        },
+        "terms": {
+          "url": "https://www.instagram.com/reels/DQ68xvAjM3R/"
+        },
+        "privacy": {
+          "url": "https://www.linkedin.com/"
+        }
       }
     },
     "type": "weekly"

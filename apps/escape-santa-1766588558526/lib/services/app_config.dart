@@ -355,6 +355,44 @@ class AppConfig {
       (_config['subscription']['popup']['closeButton']['height'] ?? 40)
           .toDouble();
 
+  // Subscription Popup Footer (Terms / Restore / Privacy)
+  bool get subscriptionFooterEnabled =>
+      _config['subscription']['popup']['footer']?['enabled'] ?? true;
+
+  String get subscriptionTermsText =>
+      _config['subscription']['popup']['footer']?['terms']?['text'] ??
+      'Terms of Use';
+  String get subscriptionTermsUrl =>
+      _config['subscription']['popup']['footer']?['terms']?['url'] ?? '';
+
+  String get subscriptionPrivacyText =>
+      _config['subscription']['popup']['footer']?['privacy']?['text'] ??
+      'Privacy Policy';
+  String get subscriptionPrivacyUrl =>
+      _config['subscription']['popup']['footer']?['privacy']?['url'] ?? '';
+
+  String get subscriptionRestorePurchaseImage =>
+      _config['subscription']['popup']['footer']?['restore']?['image'] ??
+      'assets/pack/restore.png';
+  double get subscriptionRestorePurchaseHeight =>
+      (_config['subscription']['popup']['footer']?['restore']?['height'] ?? 28)
+          .toDouble();
+
+  double get subscriptionFooterTopPadding =>
+      (_config['subscription']['popup']['footer']?['style']?['topPadding'] ??
+              12)
+          .toDouble();
+  double get subscriptionFooterFontSize =>
+      (_config['subscription']['popup']['footer']?['style']?['fontSize'] ?? 12)
+          .toDouble();
+  Color get subscriptionFooterLinkColor => _parseColor(
+      _config['subscription']['popup']['footer']?['style']?['linkColor'] ??
+          '#FFFFFF');
+  double get subscriptionFooterItemSpacing =>
+      (_config['subscription']['popup']['footer']?['style']?['itemSpacing'] ??
+              12)
+          .toDouble();
+
   // Subscription Product IDs
   List<String> get subscriptionTypes =>
       List<String>.from(_config['subscription']['types'] ?? ['monthly']);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/app_config.dart';
 import '../services/admob_service.dart';
 import '../services/iap_service.dart';
@@ -206,6 +207,55 @@ class _DifficultyScreenState extends State<DifficultyScreen>
         duration: const Duration(seconds: 3),
       ),
     );
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      _showErrorMessage('Link is not configured');
+      return;
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) {
+      _showErrorMessage('Invalid link');
+      return;
+    }
+
+    final ok = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!ok && mounted) {
+      _showErrorMessage('Could not open link');
+    }
+  }
+
+  Future<void> _handleRestorePurchases() async {
+    try {
+      final iapService = await IAPService.getInstance();
+
+      await iapService.restorePurchases(
+        onSuccess: () {
+          if (!mounted) return;
+          _closeSubscriptionPopup();
+          _showSuccessMessage('Purchases restored. Enjoy ad-free experience.');
+          setState(() {
+            _isBannerAdLoaded = false;
+          });
+          _bannerAd?.dispose();
+          _bannerAd = null;
+        },
+        onError: (error) {
+          if (!mounted) return;
+          _showErrorMessage(error);
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorMessage('Failed to restore purchases: $e');
+    }
   }
 
   @override
@@ -507,6 +557,86 @@ class _DifficultyScreenState extends State<DifficultyScreen>
                                           ],
                                         ),
                                       ),
+
+                                      if (_config.subscriptionFooterEnabled)
+                                        Padding(
+                                          padding: EdgeInsets.only(
+                                            top: _config
+                                                .subscriptionFooterTopPadding,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              GestureDetector(
+                                                onTap: () => _openExternalUrl(
+                                                  _config.subscriptionTermsUrl,
+                                                ),
+                                                child: Text(
+                                                  _config.subscriptionTermsText,
+                                                  style: TextStyle(
+                                                    fontSize: _config
+                                                        .subscriptionFooterFontSize,
+                                                    color: _config
+                                                        .subscriptionFooterLinkColor,
+                                                    decoration:
+                                                        TextDecoration.underline,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                width: _config
+                                                    .subscriptionFooterItemSpacing,
+                                              ),
+                                              GestureDetector(
+                                                onTap: _handleRestorePurchases,
+                                                child: Image.asset(
+                                                  _config
+                                                      .subscriptionRestorePurchaseImage,
+                                                  height: _config
+                                                      .subscriptionRestorePurchaseHeight,
+                                                  errorBuilder:
+                                                      (context, error, stackTrace) {
+                                                    return Text(
+                                                      'Restore Purchase',
+                                                      style: TextStyle(
+                                                        fontSize: _config
+                                                            .subscriptionFooterFontSize,
+                                                        color: _config
+                                                            .subscriptionFooterLinkColor,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                width: _config
+                                                    .subscriptionFooterItemSpacing,
+                                              ),
+                                              GestureDetector(
+                                                onTap: () => _openExternalUrl(
+                                                  _config.subscriptionPrivacyUrl,
+                                                ),
+                                                child: Text(
+                                                  _config
+                                                      .subscriptionPrivacyText,
+                                                  style: TextStyle(
+                                                    fontSize: _config
+                                                        .subscriptionFooterFontSize,
+                                                    color: _config
+                                                        .subscriptionFooterLinkColor,
+                                                    decoration:
+                                                        TextDecoration.underline,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
