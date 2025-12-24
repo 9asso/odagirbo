@@ -65,7 +65,8 @@ jobs:
           security default-keychain -s build.keychain
           security unlock-keychain -p "" build.keychain
           security import certificate.p12 -k build.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain || echo "Warning: set-key-partition-list failed, continuing..."
+          security set-keychain-settings -lut 21600 build.keychain
           
           # Decode and install provisioning profile
           echo "$PROVISIONING_PROFILE" | base64 --decode > profile.mobileprovision
