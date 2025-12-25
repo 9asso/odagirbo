@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:math' as math;
 import '../services/app_config.dart';
 import '../services/admob_service.dart';
 import '../services/iap_service.dart';
@@ -157,8 +158,8 @@ class _DifficultyScreenState extends State<DifficultyScreen>
 
       // Use subscription type from config (first type in the types array)
       await iapService.purchaseSubscription(
-        type: _config.subscriptionTypes.isNotEmpty 
-            ? _config.subscriptionTypes.first 
+        type: _config.subscriptionTypes.isNotEmpty
+            ? _config.subscriptionTypes.first
             : 'weekly',
         onSuccess: () {
           if (mounted) {
@@ -460,218 +461,333 @@ class _DifficultyScreenState extends State<DifficultyScreen>
                     child: Center(
                       child: GestureDetector(
                         onTap: () {}, // Prevent tap from propagating to barrier
-                        child: ClipRect(
-                          clipBehavior: Clip.none,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Container(
-                                width: _config.subscriptionPopupWidth,
-                                height:
-                                    MediaQuery.of(context).size.height * 0.9,
-                                decoration: BoxDecoration(
-                                  image: DecorationImage(
-                                    image: AssetImage(
-                                        _config.subscriptionBackgroundImage),
-                                    fit: BoxFit.fill,
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20),
+                        child: Builder(
+                          builder: (context) {
+                            final closeButtonHeight = (_config
+                                        .subscriptionCloseButtonHeight
+                                        .isFinite &&
+                                    _config.subscriptionCloseButtonHeight > 0)
+                                ? _config.subscriptionCloseButtonHeight
+                                : 0.0;
+
+                            final closeTop =
+                                (_config.subscriptionCloseButtonTop.isFinite &&
+                                        _config.subscriptionCloseButtonTop >= 0)
+                                    ? _config.subscriptionCloseButtonTop
+                                    : 0.0;
+                            final closeRight = (_config
+                                        .subscriptionCloseButtonRight
+                                        .isFinite &&
+                                    _config.subscriptionCloseButtonRight >= 0)
+                                ? _config.subscriptionCloseButtonRight
+                                : 0.0;
+
+                            final effectiveFooterTopPadding = 0.0;
+                            final restoreHeight = (_config
+                                        .subscriptionRestorePurchaseHeight
+                                        .isFinite &&
+                                    _config.subscriptionRestorePurchaseHeight >
+                                        0)
+                                ? _config.subscriptionRestorePurchaseHeight
+                                : 0.0;
+
+                            final footerItemSpacing = (_config
+                                        .subscriptionFooterItemSpacing
+                                        .isFinite &&
+                                    _config.subscriptionFooterItemSpacing >= 0)
+                                ? _config.subscriptionFooterItemSpacing
+                                : 0.0;
+
+                            final screenWidth =
+                                MediaQuery.of(context).size.width;
+                            final configuredPopupWidth =
+                                _config.subscriptionPopupWidth;
+                            final popupWidth = (configuredPopupWidth.isFinite &&
+                                    configuredPopupWidth > 0)
+                                ? math.min(
+                                    configuredPopupWidth, screenWidth * 1)
+                                : screenWidth * 1;
+
+                            final popupHeight =
+                                MediaQuery.of(context).size.height * .95;
+                            final mainFlex =
+                                _config.subscriptionFooterEnabled ? 9 : 1;
+                            final footerFlex =
+                                _config.subscriptionFooterEnabled ? 1 : 0;
+
+                            return ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: popupWidth,
+                                maxHeight: popupHeight,
+                              ),
+                              child: SizedBox(
+                                width: popupWidth,
+                                height: popupHeight,
+                                child: Container(
+                                  width: double.infinity,
+                                  height: popupHeight,
+                                  // decoration: BoxDecoration(
+                                  //   image: DecorationImage(
+                                  //     image: AssetImage(
+                                  //       _config.subscriptionBackgroundImage,
+                                  //     ),
+                                  //     fit: BoxFit.contain,
+                                  //   ),
+                                  // ),
                                   child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      
-                                      const SizedBox(height: 120),
-
-                                      // NO ADS! Text
-                                      Text(
-                                        _config.subscriptionTitleText,
-                                        style: TextStyle(
-                                          fontSize:
-                                              _config.subscriptionTitleFontSize,
-                                          fontWeight: FontWeight.bold,
-                                          color: _config.subscriptionTitleColor,
-                                          shadows: [
-                                            Shadow(
-                                              color: _config
-                                                  .subscriptionTitleShadowColor,
-                                              blurRadius: _config
-                                                  .subscriptionTitleShadowBlurRadius,
-                                              offset: const Offset(0, 0),
+                                      Expanded(
+                                        flex: mainFlex,
+                                        child: Container(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 0),
+                                          decoration: BoxDecoration(
+                                            image: DecorationImage(
+                                              image: AssetImage(
+                                                _config
+                                                    .subscriptionBackgroundImage,
+                                              ),
+                                              fit: BoxFit.contain,
                                             ),
-                                          ],
-                                        ),
-                                      ),
-
-                                      const SizedBox(height: 0),
-
-                                      // Subtitle Text
-                                      Text(
-                                        _config.subscriptionSubtitleText,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: _config
-                                              .subscriptionSubtitleFontSize,
-                                          fontWeight: FontWeight.w600,
-                                          color:
-                                              _config.subscriptionSubtitleColor,
-                                          shadows: [
-                                            Shadow(
-                                              color: _config
-                                                  .subscriptionSubtitleShadowColor,
-                                              blurRadius: _config
-                                                  .subscriptionSubtitleShadowBlurRadius,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-
-                                      const SizedBox(height: 25),
-
-                                      // Price Tag with Text - Tappable
-                                      GestureDetector(
-                                        onTap: _handlePurchase,
-                                        child: Stack(
-                                          alignment: Alignment.center,
-                                          children: [
-                                            Image.asset(
-                                              _config.subscriptionPriceTagImage,
-                                              height: 60,
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                return Container(
-                                                  child: Text(
-                                                    _config
-                                                        .subscriptionPriceText,
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-
-                                      if (_config.subscriptionFooterEnabled)
-                                        Padding(
-                                          padding: EdgeInsets.only(
-                                            top: _config
-                                                .subscriptionFooterTopPadding,
                                           ),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
+                                          child: Stack(
                                             children: [
-                                              GestureDetector(
-                                                onTap: () => _openExternalUrl(
-                                                  _config.subscriptionTermsUrl,
-                                                ),
-                                                child: Text(
-                                                  _config.subscriptionTermsText,
-                                                  style: TextStyle(
-                                                    fontSize: _config
-                                                        .subscriptionFooterFontSize,
-                                                    color: _config
-                                                        .subscriptionFooterLinkColor,
-                                                    decoration:
-                                                        TextDecoration.underline,
-                                                    fontWeight: FontWeight.w600,
+                                              // Close button at top left
+                                              Positioned(
+                                                top: closeTop,
+                                                left: closeRight,
+                                                child: GestureDetector(
+                                                  onTap:
+                                                      _closeSubscriptionPopup,
+                                                  child: Image.asset(
+                                                    _config
+                                                        .subscriptionCloseImage,
+                                                    height: closeButtonHeight,
+                                                    errorBuilder: (context,
+                                                        error, stackTrace) {
+                                                      return Container(
+                                                        width: 40,
+                                                        height: 40,
+                                                        decoration:
+                                                            const BoxDecoration(
+                                                          color: Colors.white,
+                                                          shape:
+                                                              BoxShape.circle,
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.close,
+                                                          color: Colors.black87,
+                                                          size: 24,
+                                                        ),
+                                                      );
+                                                    },
                                                   ),
                                                 ),
                                               ),
-                                              SizedBox(
-                                                width: _config
-                                                    .subscriptionFooterItemSpacing,
-                                              ),
-                                              GestureDetector(
-                                                onTap: _handleRestorePurchases,
-                                                child: Image.asset(
-                                                  _config
-                                                      .subscriptionRestorePurchaseImage,
-                                                  height: _config
-                                                      .subscriptionRestorePurchaseHeight,
-                                                  errorBuilder:
-                                                      (context, error, stackTrace) {
-                                                    return Text(
-                                                      'Restore Purchase',
-                                                      style: TextStyle(
-                                                        fontSize: _config
-                                                            .subscriptionFooterFontSize,
-                                                        color: _config
-                                                            .subscriptionFooterLinkColor,
-                                                        fontWeight:
-                                                            FontWeight.w600,
+
+                                              // Title and Subtitle in the center
+                                              Center(
+                                                child: Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 0,
+                                                    vertical: 0,
+                                                  ),
+                                                  child: Column(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        _config
+                                                            .subscriptionTitleText,
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                        style: TextStyle(
+                                                          fontSize: _config
+                                                              .subscriptionTitleFontSize,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: _config
+                                                              .subscriptionTitleColor,
+                                                          shadows: [
+                                                            Shadow(
+                                                              color: _config
+                                                                  .subscriptionTitleShadowColor,
+                                                              blurRadius: _config
+                                                                  .subscriptionTitleShadowBlurRadius,
+                                                              offset:
+                                                                  const Offset(
+                                                                      0, 0),
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
-                                                    );
-                                                  },
+                                                      const SizedBox(height: 8),
+                                                      Text(
+                                                        _config
+                                                            .subscriptionSubtitleText,
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                        style: TextStyle(
+                                                          fontSize: _config
+                                                              .subscriptionSubtitleFontSize,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: _config
+                                                              .subscriptionSubtitleColor,
+                                                          shadows: [
+                                                            Shadow(
+                                                              color: _config
+                                                                  .subscriptionSubtitleShadowColor,
+                                                              blurRadius: _config
+                                                                  .subscriptionSubtitleShadowBlurRadius,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
-                                              SizedBox(
-                                                width: _config
-                                                    .subscriptionFooterItemSpacing,
-                                              ),
-                                              GestureDetector(
-                                                onTap: () => _openExternalUrl(
-                                                  _config.subscriptionPrivacyUrl,
-                                                ),
-                                                child: Text(
-                                                  _config
-                                                      .subscriptionPrivacyText,
-                                                  style: TextStyle(
-                                                    fontSize: _config
-                                                        .subscriptionFooterFontSize,
-                                                    color: _config
-                                                        .subscriptionFooterLinkColor,
-                                                    decoration:
-                                                        TextDecoration.underline,
-                                                    fontWeight: FontWeight.w600,
+
+                                              const SizedBox(height: 20),
+
+                                              // Purchase button at bottom center
+                                              Positioned(
+                                                left: 0,
+                                                right: 0,
+                                                bottom: 0,
+                                                child: Center(
+                                                  child: GestureDetector(
+                                                    onTap: _handlePurchase,
+                                                    child: Image.asset(
+                                                      _config
+                                                          .subscriptionPriceTagImage,
+                                                      height: 50,
+                                                      errorBuilder: (context,
+                                                          error, stackTrace) {
+                                                        return Text(
+                                                          _config
+                                                              .subscriptionPriceText,
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 14,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color: Colors.white,
+                                                          ),
+                                                        );
+                                                      },
+                                                    ),
                                                   ),
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
+                                      ),
+                                      if (_config.subscriptionFooterEnabled)
+                                        Expanded(
+                                          flex: footerFlex,
+                                          child: Padding(
+                                            padding: EdgeInsets.only(
+                                              top: effectiveFooterTopPadding,
+                                            ),
+                                            child: Center(
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.center,
+                                                  children: [
+                                                    GestureDetector(
+                                                      onTap: () =>
+                                                          _openExternalUrl(
+                                                        _config
+                                                            .subscriptionTermsUrl,
+                                                      ),
+                                                      child: Text(
+                                                        _config
+                                                            .subscriptionTermsText,
+                                                        style: TextStyle(
+                                                          fontSize: _config
+                                                              .subscriptionFooterFontSize,
+                                                          color: _config
+                                                              .subscriptionFooterLinkColor,
+                                                          decoration:
+                                                              TextDecoration
+                                                                  .underline,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    SizedBox(
+                                                        width:
+                                                            footerItemSpacing),
+                                                    GestureDetector(
+                                                      onTap:
+                                                          _handleRestorePurchases,
+                                                      child: Image.asset(
+                                                        _config
+                                                            .subscriptionRestorePurchaseImage,
+                                                        height: restoreHeight,
+                                                        errorBuilder: (context,
+                                                            error, stackTrace) {
+                                                          return Text(
+                                                            'Restore Purchase',
+                                                            style: TextStyle(
+                                                              fontSize: _config
+                                                                  .subscriptionFooterFontSize,
+                                                              color: _config
+                                                                  .subscriptionFooterLinkColor,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                            ),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
+                                                    SizedBox(
+                                                        width:
+                                                            footerItemSpacing),
+                                                    GestureDetector(
+                                                      onTap: () =>
+                                                          _openExternalUrl(
+                                                        _config
+                                                            .subscriptionPrivacyUrl,
+                                                      ),
+                                                      child: Text(
+                                                        _config
+                                                            .subscriptionPrivacyText,
+                                                        style: TextStyle(
+                                                          fontSize: _config
+                                                              .subscriptionFooterFontSize,
+                                                          color: _config
+                                                              .subscriptionFooterLinkColor,
+                                                          decoration:
+                                                              TextDecoration
+                                                                  .underline,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
                               ),
-
-                              // Close button at top right
-                              Positioned(
-                                top: _config.subscriptionCloseButtonTop,
-                                left: _config.subscriptionCloseButtonRight,
-                                child: GestureDetector(
-                                  onTap: _closeSubscriptionPopup,
-                                  child: Image.asset(
-                                    _config.subscriptionCloseImage,
-                                    height:
-                                        _config.subscriptionCloseButtonHeight,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: const BoxDecoration(
-                                          color: Colors.white,
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(
-                                          Icons.close,
-                                          color: Colors.black87,
-                                          size: 24,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
                       ),
                     ),
