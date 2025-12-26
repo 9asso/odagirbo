@@ -258,6 +258,12 @@ jobs:
             fi
             echo "Bundle ID: $BUNDLE_ID"
 
+            echo "Using team id for archive: $IOS_TEAM_ID"
+            if [ -z "$IOS_TEAM_ID" ]; then
+              echo "Error: IOS_TEAM_ID is empty; cannot codesign archive. Check provisioning profile parsing step."
+              exit 1
+            fi
+
             ARCHIVE_RESULT_BUNDLE="build/Runner-archive.xcresult"
             if ! xcodebuild -workspace ios/Runner.xcworkspace \
               -scheme Runner \
@@ -268,6 +274,10 @@ jobs:
               -archivePath build/Runner.xcarchive \
               archive \
               OTHER_CODE_SIGN_FLAGS="$OTHER_CODE_SIGN_FLAGS" \
+              DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+              CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY="$IOS_SIGN_IDENTITY" \
+              PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
               2>&1 | tee xcodebuild-archive.raw.log | xcpretty --no-color; then
               echo "\n--- xcodebuild archive failed: tail raw log ---"
               tail -n 800 xcodebuild-archive.raw.log || true
