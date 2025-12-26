@@ -9,11 +9,6 @@ on:
         description: 'App folder name (e.g., frost-world-1766192023455)'
         required: true
         type: string
-      code_signing_id:
-        description: 'Optional: subfolder under apps/<app_name>/.code-signing/ (defaults to root .code-signing/)'
-        required: false
-        type: string
-        default: ''
 
 jobs:
   build-ios:
@@ -46,9 +41,6 @@ jobs:
           set -euo pipefail
 
           SIGN_DIR=".code-signing"
-          if [ -n "${{ inputs.code_signing_id }}" ]; then
-            SIGN_DIR=".code-signing/${{ inputs.code_signing_id }}"
-          fi
 
           CERT_PATH="$SIGN_DIR/certificate.p12"
           PROFILE_PATH="$SIGN_DIR/profile.mobileprovision"
