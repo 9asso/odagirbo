@@ -41,8 +41,9 @@ jobs:
       
       - name: Setup code signing (if provided)
         if: ${{ inputs.code_signing_id != '' }}
+        working-directory: ./apps/${{ inputs.app_name }}
         run: |
-          CODE_SIGNING_FILE="apps/${{ inputs.app_name }}/.code-signing/${{ inputs.code_signing_id }}.json"
+          CODE_SIGNING_FILE=".code-signing/${{ inputs.code_signing_id }}.json"
           
           if [ ! -f "$CODE_SIGNING_FILE" ]; then
             echo "Error: Code signing configuration not found: $CODE_SIGNING_FILE"
@@ -61,254 +62,168 @@ jobs:
           
           # Decode and install certificate
           echo "$CERTIFICATE" | base64 --decode > certificate.p12
-          KEYCHAIN_PATH="$HOME/Library/Keychains/build.keychain-db"
-          security create-keychain -p "" "$KEYCHAIN_PATH"
-          # Ensure Xcode can actually find this keychain.
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-          security default-keychain -s "$KEYCHAIN_PATH"
-          security unlock-keychain -p "" "$KEYCHAIN_PATH"
-          security import certificate.p12 -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
-          # Allow codesign/xcodebuild to access the private key in CI.
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" || echo "Warning: set-key-partition-list failed, continuing..."
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           
           # Decode and install provisioning profile
           echo "$PROVISIONING_PROFILE" | base64 --decode > profile.mobileprovision
-          # The UUID is inside the embedded plist; grep can fail depending on encoding.
           security cms -D -i profile.mobileprovision > profile.plist
           UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' profile.plist 2>/dev/null || true)
           if [ -z "$UUID" ]; then
-            echo "Error: Could not extract UUID from provisioning profile plist"
-            echo "Dumping profile plist top-level keys:"
-            /usr/libexec/PlistBuddy -c 'Print' profile.plist | head -200 || true
+            echo "Error: Could not extract UUID from provisioning profile"
             exit 1
           fi
-          echo "Provisioning profile UUID: $UUID"
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
 
-          # Extract team id from provisioning profile so Xcode signing works in CI.
+          # Extract signing info
           TEAM_ID=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' profile.plist 2>/dev/null || true)
-          if [ -z "$TEAM_ID" ]; then
-            TEAM_ID=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationIdentifierPrefix:0' profile.plist 2>/dev/null || true)
-          fi
-          if [ -z "$TEAM_ID" ]; then
-            echo "Error: Could not extract TeamIdentifier from provisioning profile"
-            exit 1
-          fi
-          echo "Team ID from provisioning profile: $TEAM_ID"
-
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' profile.plist 2>/dev/null || true)
-          if [ -z "$PROFILE_NAME" ]; then
-            echo "Error: Could not extract provisioning profile Name"
-            exit 1
-          fi
-          echo "Provisioning profile Name: $PROFILE_NAME"
-
           PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' profile.plist 2>/dev/null || true)
-          if [ -z "$PROFILE_APP_ID" ]; then
-            echo "Error: Could not extract Entitlements:application-identifier from provisioning profile"
-            exit 1
-          fi
-          echo "Provisioning profile application-identifier: $PROFILE_APP_ID"
-
-          # Derive bundle id from the profile's application-identifier (TEAMID.<bundle> or TEAMID.*)
-          PROFILE_BUNDLE_ID="${PROFILE_APP_ID#${TEAM_ID}.}"
-          echo "Provisioning profile bundle id pattern: $PROFILE_BUNDLE_ID"
-
-          echo "Provisioning profile diagnostics:"
-          echo "- get-task-allow: $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' profile.plist 2>/dev/null || echo 'n/a')"
-          echo "- ProvisionsAllDevices: $(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' profile.plist 2>/dev/null || echo 'n/a')"
-          echo "- Has ProvisionedDevices: $(/usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' profile.plist >/dev/null 2>&1 && echo 'true' || echo 'false')"
-
-          # Decide signing identity + export method based on provisioning profile.
+          
+          # Determine signing certificate name from profile type
           GET_TASK_ALLOW=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' profile.plist 2>/dev/null || echo "false")
-          HAS_PROVISIONED_DEVICES=$(/usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' profile.plist >/dev/null 2>&1 && echo "true" || echo "false")
-          PROVISIONS_ALL_DEVICES=$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' profile.plist 2>/dev/null || echo "false")
-
           if [ "$GET_TASK_ALLOW" = "true" ]; then
-            SIGN_IDENTITY_PRIMARY="Apple Development"
-            SIGN_IDENTITY_FALLBACK="iPhone Developer"
-            IOS_EXPORT_METHOD="development"
+            SIGNING_CERTIFICATE="Apple Development"
           else
-            SIGN_IDENTITY_PRIMARY="Apple Distribution"
-            SIGN_IDENTITY_FALLBACK="iPhone Distribution"
-            if [ "$PROVISIONS_ALL_DEVICES" = "true" ]; then
-              IOS_EXPORT_METHOD="enterprise"
-            elif [ "$HAS_PROVISIONED_DEVICES" = "true" ]; then
-              IOS_EXPORT_METHOD="ad-hoc"
-            else
-              IOS_EXPORT_METHOD="app-store"
-            fi
+            SIGNING_CERTIFICATE="Apple Distribution"
           fi
-
-          echo "get-task-allow=$GET_TASK_ALLOW, export-method=$IOS_EXPORT_METHOD"
-
-          # Verify the imported identity matches the profile type.
-          if security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -q "$SIGN_IDENTITY_PRIMARY"; then
-            SIGN_IDENTITY="$SIGN_IDENTITY_PRIMARY"
-          elif security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -q "$SIGN_IDENTITY_FALLBACK"; then
-            SIGN_IDENTITY="$SIGN_IDENTITY_FALLBACK"
-          else
-            echo "Error: No matching signing identity found in keychain for this provisioning profile."
-            echo "Expected one of: $SIGN_IDENTITY_PRIMARY or $SIGN_IDENTITY_FALLBACK"
-            echo "Available identities:"
-            security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
-            exit 1
-          fi
-          echo "Using signing identity: $SIGN_IDENTITY"
-
-          # Patch Xcode project to use manual signing (CI cannot rely on Xcode automatic signing).
-          PBXPROJ="apps/${{ inputs.app_name }}/ios/Runner.xcodeproj/project.pbxproj"
-          if [ -f "$PBXPROJ" ]; then
-            echo "Patching $PBXPROJ for CI signing..."
-            perl -pi -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ"
-            perl -0777 -i -pe "s/DEVELOPMENT_TEAM = [A-Z0-9]+;/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
-            perl -0777 -i -pe "s/(CODE_SIGN_STYLE = Manual;\n)/$1\t\t\t\tDEVELOPMENT_TEAM = $TEAM_ID;\n/g" "$PBXPROJ"
-            perl -0777 -i -pe "s/PROVISIONING_PROFILE_SPECIFIER = \"[^\"]*\";/PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";/g" "$PBXPROJ"
-            perl -0777 -i -pe "s/(DEVELOPMENT_TEAM = $TEAM_ID;\n)/$1\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";\n/g" "$PBXPROJ"
-            perl -0777 -i -pe "s/\"PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\\*\]\" = \"[^\"]*\";/\"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]\" = \"$PROFILE_NAME\";/g" "$PBXPROJ"
-            perl -0777 -i -pe "s/\"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]\" = \"[^\"]*\";/\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"$SIGN_IDENTITY\";/g" "$PBXPROJ"
-            perl -0777 -i -pe "s/CODE_SIGN_IDENTITY = \"[^\"]*\";/CODE_SIGN_IDENTITY = \"$SIGN_IDENTITY\";/g" "$PBXPROJ"
-
-            # If profile is not wildcard, ensure the app bundle id matches the profile.
-            if [ -n "$PROFILE_BUNDLE_ID" ] && [ "$PROFILE_BUNDLE_ID" != "*" ] && [ "$PROFILE_BUNDLE_ID" != "${TEAM_ID}.*" ]; then
-              echo "Forcing PRODUCT_BUNDLE_IDENTIFIER to match provisioning profile: $PROFILE_BUNDLE_ID"
-              perl -0777 -i -pe "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/PRODUCT_BUNDLE_IDENTIFIER = $PROFILE_BUNDLE_ID;/g" "$PBXPROJ"
-              perl -0777 -i -pe "s/\"PRODUCT_BUNDLE_IDENTIFIER\[sdk=iphoneos\\*\]\" = \"[^\"]*\";/\"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]\" = \"$PROFILE_BUNDLE_ID\";/g" "$PBXPROJ"
-            else
-              echo "Provisioning profile is wildcard or bundle id could not be derived; leaving PRODUCT_BUNDLE_IDENTIFIER unchanged."
-            fi
-          else
-            echo "Warning: pbxproj not found at $PBXPROJ"
-          fi
-
-          # Export values for later steps.
-          echo "IOS_EXPORT_METHOD=$IOS_EXPORT_METHOD" >> $GITHUB_ENV
-          echo "IOS_SIGN_IDENTITY=$SIGN_IDENTITY" >> $GITHUB_ENV
-          echo "IOS_TEAM_ID=$TEAM_ID" >> $GITHUB_ENV
-          echo "IOS_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-          echo "IOS_PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV
-          echo "IOS_PROFILE_BUNDLE_ID=$PROFILE_BUNDLE_ID" >> $GITHUB_ENV
-
-          echo "Available code signing identities:"
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
-          security find-identity -v -p codesigning || true
           
-          # Clean up sensitive files
-          rm certificate.p12 profile.mobileprovision profile.plist
+          # Export environment variables for later steps
+          echo "CERTIFICATE_PASSWORD=$CERTIFICATE_PASSWORD" >> $GITHUB_ENV
+          echo "SIGNING_CERTIFICATE=$SIGNING_CERTIFICATE" >> $GITHUB_ENV
+          echo "TEAM_IDENTIFIER=$TEAM_ID" >> $GITHUB_ENV
+          echo "UUID=$UUID" >> $GITHUB_ENV
           
-          echo "Code signing configured successfully"
+          # Extract bundle ID from provisioning profile
+          BUNDLE_ID="${PROFILE_APP_ID#${TEAM_ID}.}"
+          echo "BUNDLE_ID=$BUNDLE_ID" >> $GITHUB_ENV
+          
+          rm profile.plist
       
+      - name: Import Certificate
+        if: ${{ inputs.code_signing_id != '' }}
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          security create-keychain -p "${{ env.CERTIFICATE_PASSWORD }}" build.keychain
+          security import certificate.p12 -k ~/Library/Keychains/build.keychain -P "${{ env.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+          security list-keychains -s ~/Library/Keychains/build.keychain
+          security find-identity -p codesigning -v
+
+      - name: Unlock keychain
+        if: ${{ inputs.code_signing_id != '' }}
+        run: |
+          security unlock-keychain -p "${{ env.CERTIFICATE_PASSWORD }}" ~/Library/Keychains/build.keychain
+
+      - name: Configure keychain for codesigning
+        if: ${{ inputs.code_signing_id != '' }}
+        run: |
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${{ env.CERTIFICATE_PASSWORD }}" ~/Library/Keychains/build.keychain
+
       - name: Install Flutter dependencies
         working-directory: ./apps/${{ inputs.app_name }}
         run: flutter pub get
-      
-      - name: Run Flutter doctor
-        run: flutter doctor -v
-      
-      - name: Clean build
-        working-directory: ./apps/${{ inputs.app_name }}
-        run: flutter clean
-      
-      - name: Build iOS app (with codesign if configured)
+
+      - name: Build iOS app (no codesign)
+        if: ${{ inputs.code_signing_id != '' }}
         working-directory: ./apps/${{ inputs.app_name }}
         run: |
-          set -o pipefail
-          if [ -n "${{ inputs.code_signing_id }}" ]; then
-            echo "Building with code signing..."
-            echo "Using export method: $IOS_EXPORT_METHOD"
-            echo "Using signing identity: $IOS_SIGN_IDENTITY"
-            echo "Using keychain: $IOS_KEYCHAIN_PATH"
-            echo "Using profile: $IOS_PROFILE_NAME"
-            security unlock-keychain -p "" "$IOS_KEYCHAIN_PATH" || true
-            security set-keychain-settings -lut 21600 "$IOS_KEYCHAIN_PATH" || true
-            security list-keychains -d user || true
-            echo "Identities visible to codesign (build keychain):"
-            security find-identity -v -p codesigning "$IOS_KEYCHAIN_PATH" || true
-            echo "Identities visible to codesign (all):"
-            security find-identity -v -p codesigning || true
+          cd ios
+          pod install
+          cd ..
+          flutter build ios --release --no-codesign
 
-            # 1) Let Flutter set up iOS project/pods (build unsigned)
-            flutter build ios --release --no-codesign
+      - name: Create Entitlements File
+        if: ${{ inputs.code_signing_id != '' }}
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          cat > ios/Runner/Runner.entitlements <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+            <dict>
+              <key>aps-environment</key>
+              <string>production</string>
+            </dict>
+          </plist>
+          EOF
 
-            # Some Flutter plugins (via CocoaPods) can incorrectly add *.xcprivacy files to the
-            # Compile Sources phase, which breaks archive builds with:
-            #   no rule to process file ... PrivacyInfo.xcprivacy ... (in target ... from project Pods)
-            # Work around it by removing any *.xcprivacy entries from the Pods project sources lists.
-            PODS_PBXPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
-            if [ -f "$PODS_PBXPROJ" ]; then
-              echo "Patching Pods project to remove *.xcprivacy from Sources..."
-              perl -i -ne 'print unless /\.xcprivacy in Sources/' "$PODS_PBXPROJ"
-            fi
+      - name: Sign iOS app with xcodebuild
+        if: ${{ inputs.code_signing_id != '' }}
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          cd build/ios/iphoneos
+          xcodebuild -workspace $GITHUB_WORKSPACE/apps/${{ inputs.app_name }}/ios/Runner.xcworkspace \
+             -scheme Runner \
+             -configuration Release \
+             -sdk iphoneos \
+             -archivePath $PWD/Runner.xcarchive \
+             clean archive \
+             CODE_SIGN_IDENTITY="${{ env.SIGNING_CERTIFICATE }}" \
+             PROVISIONING_PROFILE_SPECIFIER="${{ env.UUID }}" \
+             CODE_SIGN_STYLE=Manual \
+             DEVELOPMENT_TEAM="${{ env.TEAM_IDENTIFIER }}"
 
-            # 2) Archive with xcodebuild using manual signing
-            export OTHER_CODE_SIGN_FLAGS="--keychain $IOS_KEYCHAIN_PATH"
+      - name: Create Export Options Plist
+        if: ${{ inputs.code_signing_id != '' }}
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          cat > ios/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <plist version="1.0">
+              <dict>
+                  <key>method</key>
+                  <string>app-store</string>
+                  <key>teamID</key>
+                  <string>${{ env.TEAM_IDENTIFIER }}</string>
+                  <key>provisioningProfiles</key>
+                  <dict>
+                      <key>${{ env.BUNDLE_ID }}</key>
+                      <string>${{ env.UUID }}</string>
+                  </dict>
+                  <key>signingStyle</key>
+                  <string>manual</string>
+                  <key>signingCertificate</key>
+                  <string>${{ env.SIGNING_CERTIFICATE }}</string>
+                  <key>appThinning</key>
+                  <string>false</string>
+                  <key>destination</key>
+                  <string>export</string>
+                  <key>uploadSymbols</key>
+                  <true/>
+                  <key>bitcode</key>
+                  <string>disable</string>
+                  <key>includeProvisioningProfiles</key>
+                  <true/>
+              </dict>
+          </plist>
+          EOF
 
-            BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' ios/Runner/Info.plist 2>/dev/null || true)
-            if [ -z "$BUNDLE_ID" ] || [ "$BUNDLE_ID" = "\$(PRODUCT_BUNDLE_IDENTIFIER)" ]; then
-              # Prefer the project's pbxproj value to avoid accidentally matching unrelated build settings.
-              BUNDLE_ID=$(grep -m1 -E 'PRODUCT_BUNDLE_IDENTIFIER = [^;]+' ios/Runner.xcodeproj/project.pbxproj | sed -E 's/^.*PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/\1/' | tr -d '[:space:]')
-            fi
-            if [ -z "$BUNDLE_ID" ]; then
-              BUNDLE_ID=$(xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -showBuildSettings 2>/dev/null | awk -F ' = ' '/^\s*PRODUCT_BUNDLE_IDENTIFIER\s*=\s*/ {gsub(/\r/,"",$2); print $2; exit}')
-            fi
-            if [ -z "$BUNDLE_ID" ]; then
-              echo "Error: Could not determine bundle id"
-              exit 1
-            fi
-            echo "Bundle ID: $BUNDLE_ID"
-
-            echo "Using team id for archive: $IOS_TEAM_ID"
-            if [ -z "$IOS_TEAM_ID" ]; then
-              echo "Error: IOS_TEAM_ID is empty; cannot codesign archive. Check provisioning profile parsing step."
-              exit 1
-            fi
-
-            ARCHIVE_RESULT_BUNDLE="build/Runner-archive.xcresult"
-            if ! xcodebuild -workspace ios/Runner.xcworkspace \
-              -scheme Runner \
-              -configuration Release \
-              -sdk iphoneos \
-              -destination 'generic/platform=iOS' \
-              -resultBundlePath "$ARCHIVE_RESULT_BUNDLE" \
-              -archivePath build/Runner.xcarchive \
-              archive \
-              OTHER_CODE_SIGN_FLAGS="$OTHER_CODE_SIGN_FLAGS" \
-              DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
-              CODE_SIGN_STYLE=Manual \
-              CODE_SIGN_IDENTITY="$IOS_SIGN_IDENTITY" \
-              PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
-              2>&1 | tee xcodebuild-archive.raw.log | xcpretty --no-color; then
-              echo "\n--- xcodebuild archive failed: tail raw log ---"
-              tail -n 800 xcodebuild-archive.raw.log || true
-              echo "\n--- xcodebuild archive failed: error summary ---"
-              grep -nE "(^|[^A-Za-z])(fatal error:|error:|ld:|Undefined symbols|CodeSign error|Provisioning profile|No signing certificate|requires a provisioning profile)" xcodebuild-archive.raw.log | tail -n 200 || true
-              exit 1
-            fi
-
-            # 3) Export IPA
-            BUNDLE_ID="$BUNDLE_ID" IOS_EXPORT_METHOD="$IOS_EXPORT_METHOD" IOS_TEAM_ID="$IOS_TEAM_ID" IOS_PROFILE_NAME="$IOS_PROFILE_NAME" \
-              python3 -c 'import os, plistlib; b=os.environ["BUNDLE_ID"].strip(); m=os.environ["IOS_EXPORT_METHOD"].strip(); t=os.environ["IOS_TEAM_ID"].strip(); p=os.environ["IOS_PROFILE_NAME"].strip(); d={"method":m,"signingStyle":"manual","teamID":t,"provisioningProfiles":{b:p},"compileBitcode":False}; plistlib.dump(d, open("exportOptions.plist","wb"), fmt=plistlib.FMT_XML); print("Wrote exportOptions.plist")'
-
-            echo "Validating exportOptions.plist..."
-            plutil -lint exportOptions.plist || { echo "exportOptions.plist invalid:"; cat exportOptions.plist; exit 1; }
-
-            mkdir -p build/ios/ipa
-            if ! xcodebuild -exportArchive \
-              -archivePath build/Runner.xcarchive \
-              -exportOptionsPlist exportOptions.plist \
-              -exportPath build/ios/ipa \
-              2>&1 | tee xcodebuild-export.raw.log | xcpretty --no-color; then
-              echo "\n--- xcodebuild exportArchive failed: tail raw log ---"
-              tail -n 800 xcodebuild-export.raw.log || true
-              echo "\n--- xcodebuild exportArchive failed: error summary ---"
-              grep -nE "(^|[^A-Za-z])(fatal error:|error:|ld:|Undefined symbols|CodeSign error|Provisioning profile|No signing certificate|requires a provisioning profile)" xcodebuild-export.raw.log | tail -n 200 || true
-              exit 1
-            fi
-          else
-            echo "Building without code signing..."
-            flutter build ios --release --no-codesign
+      - name: Create IPA Package
+        if: ${{ inputs.code_signing_id != '' }}
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          cd build/ios/iphoneos
+          xcodebuild -exportArchive \
+            -archivePath $PWD/Runner.xcarchive \
+            -exportPath $GITHUB_WORKSPACE/apps/${{ inputs.app_name }} \
+            -exportOptionsPlist $GITHUB_WORKSPACE/apps/${{ inputs.app_name }}/ios/ExportOptions.plist
+          
+          # Find and rename the IPA
+          IPA_FILE=$(find $GITHUB_WORKSPACE/apps/${{ inputs.app_name }} -maxdepth 1 -name "*.ipa" | head -1)
+          if [ -n "$IPA_FILE" ]; then
+            mv "$IPA_FILE" "$GITHUB_WORKSPACE/apps/${{ inputs.app_name }}/${{ inputs.app_name }}.ipa"
           fi
+
+      - name: Build without code signing
+        if: ${{ inputs.code_signing_id == '' }}
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          flutter build ios --release --no-codesign
+          
+          # Create unsigned IPA wrapper
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r -q "../../../${{ inputs.app_name }}.ipa" Payload
+          cd ../../..
+          ls -lh "${{ inputs.app_name }}.ipa"
 
       - name: Upload iOS build logs
         if: ${{ always() }}
@@ -316,35 +231,10 @@ jobs:
         with:
           name: ios-logs-${{ inputs.app_name }}-${{ github.run_number }}
           path: |
-            ./apps/${{ inputs.app_name }}/xcodebuild-archive.raw.log
-            ./apps/${{ inputs.app_name }}/xcodebuild-export.raw.log
-            ./apps/${{ inputs.app_name }}/exportOptions.plist
-            ./apps/${{ inputs.app_name }}/build/Runner-archive.xcresult
+            ./apps/${{ inputs.app_name }}/ios/ExportOptions.plist
+            ./apps/${{ inputs.app_name }}/build/ios/iphoneos/Runner.xcarchive
           if-no-files-found: warn
-          retention-days: 14
-          compression-level: 0
-      
-      - name: Create IPA archive
-        working-directory: ./apps/${{ inputs.app_name }}
-        run: |
-          if [ -n "${{ inputs.code_signing_id }}" ]; then
-            IPA_PATH=$(ls -1 build/ios/ipa/*.ipa 2>/dev/null | head -1 || true)
-            if [ -z "$IPA_PATH" ]; then
-              echo "Error: xcodebuild export did not produce an ipa under build/ios/ipa"
-              find build/ios -maxdepth 4 -type f -name "*.ipa" -print || true
-              exit 1
-            fi
-            cp "$IPA_PATH" "${{ inputs.app_name }}.ipa"
-            ls -lh "${{ inputs.app_name }}.ipa"
-          else
-            echo "No code signing: creating a basic IPA wrapper (may not install on device)"
-            cd build/ios/iphoneos
-            mkdir -p Payload
-            cp -r Runner.app Payload/
-            zip -r -q "../../${{ inputs.app_name }}.ipa" Payload
-            cd ../..
-            ls -lh "${{ inputs.app_name }}.ipa"
-          fi
+          retention-days: 7
       
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v4
