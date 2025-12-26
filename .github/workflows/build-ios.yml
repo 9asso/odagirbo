@@ -122,19 +122,36 @@ jobs:
           PBXPROJ="ios/Runner.xcodeproj/project.pbxproj"
           cp "$PBXPROJ" "$PBXPROJ.backup"
           
-          # Add PROVISIONING_PROFILE_SPECIFIER to pbxproj Release configurations
-          awk -v uuid="${{ env.UUID }}" '
-          /\/\* Release \*\/ = \{/ && getline && /isa = XCBuildConfiguration/ {
-            in_release = 1
-          }
-          in_release && /buildSettings = \{/ {
-            print
-            print "\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = \"" uuid "\";";  
-            in_release = 0
-            next
-          }
-          { print }
-          ' "$PBXPROJ" > "$PBXPROJ.tmp" && mv "$PBXPROJ.tmp" "$PBXPROJ"
+          # Add PROVISIONING_PROFILE_SPECIFIER to pbxproj using Python
+          python3 - "${{ env.UUID }}" "$PBXPROJ" <<'PYSCRIPT'
+import sys
+
+uuid = sys.argv[1]
+pbxproj_path = sys.argv[2]
+
+with open(pbxproj_path, "r") as f:
+    lines = f.readlines()
+
+new_lines = []
+in_release = False
+
+for line in lines:
+    new_lines.append(line)
+    
+    # Detect Release configuration blocks
+    if "/* Release */ = {" in line:
+        in_release = True
+    
+    # Add PROVISIONING_PROFILE_SPECIFIER after buildSettings line in Release blocks
+    if in_release and "buildSettings = {" in line:
+        # Check if PROVISIONING_PROFILE_SPECIFIER already exists in next few lines
+        if not any("PROVISIONING_PROFILE_SPECIFIER" in l for l in lines[lines.index(line):lines.index(line)+10]):
+            new_lines.append(f'\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{uuid}";\n')
+        in_release = False
+
+with open(pbxproj_path, "w") as f:
+    f.writelines(new_lines)
+PYSCRIPT
 
       - name: Create Entitlements File
         if: ${{ inputs.code_signing_id != '' }}
