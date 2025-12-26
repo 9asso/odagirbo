@@ -1,10 +1,8 @@
 name: Build iOS App
 
-run-name: Build iOS - ${{ inputs.app_name || 'push event' }}
+run-name: Build iOS - ${{ inputs.app_name }}
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       app_name:
@@ -20,7 +18,6 @@ jobs:
   build-ios:
     runs-on: macos-latest
     timeout-minutes: 60
-    if: github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout repository
