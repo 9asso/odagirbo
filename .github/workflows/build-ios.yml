@@ -118,6 +118,27 @@ jobs:
       - name: Create Entitlements File
         if: ${{ inputs.code_signing_id != '' }}
         working-directory: ./apps/${{ inputs.app_name }}
+      - name: Patch Xcode project for manual signing
+        if: ${{ inputs.code_signing_id != '' }}
+        working-directory: ./apps/${{ inputs.app_name }}
+        run: |
+          PBXPROJ="ios/Runner.xcodeproj/project.pbxproj"
+          cp "$PBXPROJ" "$PBXPROJ.backup"
+          
+          # Add PROVISIONING_PROFILE_SPECIFIER to pbxproj Release configurations
+          awk -v uuid="${{ env.UUID }}" '
+          /\/\* Release \*\/ = \{/ && getline && /isa = XCBuildConfiguration/ {
+            in_release = 1
+          }
+          in_release && /buildSettings = \{/ {
+            print
+            print "\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = \"" uuid "\";";
+            in_release = 0
+            next
+          }
+          { print }
+          ' "$PBXPROJ" > "$PBXPROJ.tmp" && mv "$PBXPROJ.tmp" "$PBXPROJ"
+
         run: |
           cat > ios/Runner/Runner.entitlements <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -142,7 +163,6 @@ jobs:
              -archivePath $PWD/Runner.xcarchive \
              clean archive \
              CODE_SIGN_IDENTITY="${{ env.SIGNING_CERTIFICATE }}" \
-             PROVISIONING_PROFILE_SPECIFIER="${{ env.UUID }}" \
              CODE_SIGN_STYLE=Manual \
              DEVELOPMENT_TEAM="${{ env.TEAM_IDENTIFIER }}"
 
