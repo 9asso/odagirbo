@@ -39,41 +39,31 @@ jobs:
           echo "Building app: ${{ inputs.app_name }}"
           ls -la "apps/${{ inputs.app_name }}"
       
-      - name: Setup code signing (if provided)
+      - name: Import Certificate
         if: ${{ inputs.code_signing_id != '' }}
         working-directory: ./apps/${{ inputs.app_name }}
         run: |
-          CODE_SIGNING_FILE=".code-signing/${{ inputs.code_signing_id }}.json"
-          
-          if [ ! -f "$CODE_SIGNING_FILE" ]; then
-            echo "Error: Code signing configuration not found: $CODE_SIGNING_FILE"
+          # Check if code signing files exist
+          if [ ! -f ".code-signing/certificate.p12" ] || [ ! -f ".code-signing/profile.mobileprovision" ] || [ ! -f ".code-signing/certificate_password.txt" ]; then
+            echo "Error: Code signing files not found in .code-signing/ folder"
             exit 1
           fi
           
-          echo "Loading code signing configuration from: $CODE_SIGNING_FILE"
+          # Read certificate password
+          CERT_PASSWORD=$(cat .code-signing/certificate_password.txt)
+          echo "CERTIFICATE_PASSWORD=$CERT_PASSWORD" >> $GITHUB_ENV
           
-          # Extract values from JSON using jq
-          PROVISIONING_PROFILE=$(cat "$CODE_SIGNING_FILE" | jq -r '.provisioningProfile')
-          CERTIFICATE=$(cat "$CODE_SIGNING_FILE" | jq -r '.certificate')
-          CERTIFICATE_PASSWORD=$(cat "$CODE_SIGNING_FILE" | jq -r '.certificatePassword')
-          
-          # Create directories
+          # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          
-          # Decode and install certificate
-          echo "$CERTIFICATE" | base64 --decode > certificate.p12
-          
-          # Decode and install provisioning profile
-          echo "$PROVISIONING_PROFILE" | base64 --decode > profile.mobileprovision
-          security cms -D -i profile.mobileprovision > profile.plist
+          security cms -D -i .code-signing/profile.mobileprovision > profile.plist
           UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' profile.plist 2>/dev/null || true)
           if [ -z "$UUID" ]; then
             echo "Error: Could not extract UUID from provisioning profile"
             exit 1
           fi
-          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
-
-          # Extract signing info
+          cp .code-signing/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          
+          # Extract signing info from provisioning profile
           TEAM_ID=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' profile.plist 2>/dev/null || true)
           PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' profile.plist 2>/dev/null || true)
           
@@ -85,26 +75,22 @@ jobs:
             SIGNING_CERTIFICATE="Apple Distribution"
           fi
           
+          # Extract bundle ID from provisioning profile
+          BUNDLE_ID="${PROFILE_APP_ID#${TEAM_ID}.}"
+          
           # Export environment variables for later steps
-          echo "CERTIFICATE_PASSWORD=$CERTIFICATE_PASSWORD" >> $GITHUB_ENV
           echo "SIGNING_CERTIFICATE=$SIGNING_CERTIFICATE" >> $GITHUB_ENV
           echo "TEAM_IDENTIFIER=$TEAM_ID" >> $GITHUB_ENV
           echo "UUID=$UUID" >> $GITHUB_ENV
-          
-          # Extract bundle ID from provisioning profile
-          BUNDLE_ID="${PROFILE_APP_ID#${TEAM_ID}.}"
           echo "BUNDLE_ID=$BUNDLE_ID" >> $GITHUB_ENV
           
-          rm profile.plist
-      
-      - name: Import Certificate
-        if: ${{ inputs.code_signing_id != '' }}
-        working-directory: ./apps/${{ inputs.app_name }}
-        run: |
-          security create-keychain -p "${{ env.CERTIFICATE_PASSWORD }}" build.keychain
-          security import certificate.p12 -k ~/Library/Keychains/build.keychain -P "${{ env.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+          # Create keychain and import certificate
+          security create-keychain -p "$CERT_PASSWORD" build.keychain
+          security import .code-signing/certificate.p12 -k ~/Library/Keychains/build.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
           security list-keychains -s ~/Library/Keychains/build.keychain
           security find-identity -p codesigning -v
+          
+          rm profile.plist
 
       - name: Unlock keychain
         if: ${{ inputs.code_signing_id != '' }}
