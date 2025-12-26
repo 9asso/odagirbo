@@ -3,6 +3,8 @@ name: Build iOS App
 run-name: Build iOS - ${{ inputs.app_name }}
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       app_name:
